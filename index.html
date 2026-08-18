@@ -3,203 +3,259 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>OlovPay Web App</title>
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <title>FlayPay</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
     :root {
-      --bg-color: #0c0d12;
-      --card-bg: #151720;
+      --bg-color: #0b0b0e;
+      --card-bg: #141419;
       --card-border: rgba(255, 69, 0, 0.25);
       --fire-orange: #ff4500;
       --fire-yellow: #ffaa00;
       --text-main: #ffffff;
-      --text-sub: #8e8ea8;
+      --text-sub: #9a9ab0;
     }
 
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
     body { background-color: var(--bg-color); color: var(--text-main); padding-bottom: 85px; overflow-x: hidden; }
 
-    .page { display: none; padding: 16px; animation: fadeIn 0.25s ease; }
+    .bg-glow { position: fixed; top: -100px; left: -100px; width: 300px; height: 300px; background: radial-gradient(circle, rgba(255, 69, 0, 0.15) 0%, transparent 70%); pointer-events: none; z-index: 0; }
+    
+    .page { display: none; padding: 16px; animation: fadeIn 0.3s ease; position: relative; z-index: 1; }
     .page.active { display: block; }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 
-    /* Header & Back Buttons */
-    .top-bar { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: rgba(15, 16, 22, 0.9); backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 100; border-bottom: 1px solid var(--card-border); }
-    .back-btn { background: rgba(255,255,255,0.1); border: none; color: #fff; width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+    .header { display: flex; justify-content: space-between; align-items: center; padding: 14px 20px; background: rgba(15, 15, 20, 0.85); backdrop-filter: blur(12px); position: sticky; top: 0; z-index: 100; border-bottom: 1px solid var(--card-border); }
+    .logo { display: flex; align-items: center; gap: 8px; font-size: 20px; font-weight: 900; background: linear-gradient(45deg, var(--fire-orange), var(--fire-yellow)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
 
-    /* Buttons & Cards */
-    .btn-fire { background: linear-gradient(90deg, var(--fire-orange), var(--fire-yellow)); color: #fff; border: none; padding: 12px 20px; border-radius: 12px; font-weight: 700; font-size: 14px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 4px 15px rgba(255, 69, 0, 0.35); cursor: pointer; width: 100%; }
-    .card-box { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 16px; padding: 16px; margin-bottom: 14px; }
+    .balance-card { background: linear-gradient(135deg, #1f1412 0%, #121216 100%); border: 1px solid var(--card-border); border-radius: 20px; padding: 20px; box-shadow: 0 4px 25px rgba(255, 69, 0, 0.12); }
+    .balance-val { font-size: 30px; font-weight: 800; margin: 8px 0 16px; color: #fff; text-shadow: 0 0 12px rgba(255, 69, 0, 0.3); }
 
-    /* PUBG Product Screen (Skrinshot bo'yicha) */
-    .game-banner { width: 100%; height: 160px; border-radius: 18px; object-fit: cover; margin-bottom: 14px; border: 1px solid var(--card-border); }
-    .id-check-box { display: flex; gap: 8px; margin: 12px 0; }
-    .id-input { flex: 1; background: #000; border: 1px solid var(--card-border); border-radius: 10px; padding: 10px 14px; color: #fff; font-size: 14px; outline: none; }
-    .uc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
-    .uc-card { background: var(--card-bg); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; padding: 14px; text-align: center; cursor: pointer; transition: 0.2s; }
-    .uc-card:active { border-color: var(--fire-orange); transform: scale(0.98); }
+    .btn-fire { background: linear-gradient(90deg, var(--fire-orange), var(--fire-yellow)); color: #fff; border: none; padding: 12px 20px; border-radius: 12px; font-weight: 700; font-size: 14px; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 4px 15px rgba(255, 69, 0, 0.35); cursor: pointer; }
 
-    /* Fire Timer */
-    .timer-box { font-size: 22px; font-weight: 800; color: var(--fire-yellow); text-align: center; margin: 10px 0; text-shadow: 0 0 10px rgba(255, 170, 0, 0.5); }
+    .action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
+    .action-card { background: var(--card-bg); border: 1px solid rgba(255, 255, 255, 0.06); padding: 14px; border-radius: 16px; display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 14px; cursor: pointer; }
+    .action-card i { color: var(--fire-orange); font-size: 18px; }
 
-    /* Bottom Navbar */
-    .navbar { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(12, 13, 18, 0.95); backdrop-filter: blur(15px); display: grid; grid-template-columns: repeat(4, 1fr); padding: 10px 0; border-top: 1px solid rgba(255, 255, 255, 0.08); z-index: 1000; }
+    .banner-container { position: relative; border-radius: 18px; overflow: hidden; margin-top: 14px; border: 1px solid var(--card-border); height: 130px; background: #141419; }
+    .banner-slide { position: absolute; inset: 0; opacity: 0; transition: opacity 0.8s ease-in-out; background-size: cover; background-position: center; }
+    .banner-slide.active { opacity: 1; }
+
+    .sec-title { font-size: 17px; font-weight: 800; margin: 18px 0 12px; display: flex; align-items: center; gap: 8px; }
+    .sec-title i { color: var(--fire-orange); }
+
+    .games-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .game-item { background: var(--card-bg); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 16px; padding: 10px; text-align: center; cursor: pointer; }
+    .game-item img { width: 100%; height: 100px; border-radius: 12px; object-fit: cover; margin-bottom: 8px; }
+
+    .reviews-box { background: var(--card-bg); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 16px; padding: 14px; margin-top: 10px; }
+    .stars { color: var(--fire-yellow); font-size: 13px; margin-bottom: 4px; }
+
+    .pay-methods { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+    .pay-card { background: var(--card-bg); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 16px; padding: 14px; cursor: pointer; }
+    .pay-card.active { border-color: var(--fire-orange); background: rgba(255, 69, 0, 0.08); }
+
+    .amount-input { width: 100%; background: #000; border: 1px solid var(--card-border); border-radius: 14px; padding: 16px; color: #fff; font-size: 22px; font-weight: 700; margin: 12px 0; outline: none; }
+    .quick-chips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+    .chip { background: var(--card-bg); border: 1px solid rgba(255, 255, 255, 0.08); padding: 10px 0; border-radius: 10px; text-align: center; font-size: 13px; font-weight: 700; cursor: pointer; }
+
+    .timer-fire { font-size: 24px; font-weight: 900; color: var(--fire-yellow); text-shadow: 0 0 10px var(--fire-orange); text-align: center; margin-bottom: 10px; }
+
+    .copy-box { background: #181212; border: 1px dashed var(--fire-orange); border-radius: 14px; padding: 16px; margin: 14px 0; display: flex; justify-content: space-between; align-items: center; }
+
+    .navbar { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(12, 12, 16, 0.95); backdrop-filter: blur(15px); display: grid; grid-template-columns: repeat(4, 1fr); padding: 10px 0; border-top: 1px solid rgba(255, 255, 255, 0.06); z-index: 1000; }
     .nav-link { display: flex; flex-direction: column; align-items: center; gap: 4px; color: var(--text-sub); font-size: 11px; text-decoration: none; cursor: pointer; }
     .nav-link.active { color: var(--fire-orange); font-weight: 700; }
 
-    /* Modal Screen */
     .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 2000; align-items: center; justify-content: center; padding: 20px; }
     .modal-content { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 20px; padding: 20px; width: 100%; max-width: 360px; }
   </style>
 </head>
 <body>
 
-  <!-- Audio Player (Avto ijro) -->
-  <audio id="bgMusic" loop autoplay>
-    <source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" type="audio/mpeg">
-  </audio>
+  <div class="bg-glow"></div>
 
-  <!-- Top Bar -->
-  <div class="top-bar">
-    <div style="display:flex; align-items:center; gap:8px;">
-      <i class="fa-solid fa-fire-flame-curved" style="color:var(--fire-orange); font-size:20px;"></i>
-      <b style="font-size:18px;">OlovPay</b>
-    </div>
-    <span style="font-size:12px; color:var(--text-sub);"><i class="fa-solid fa-music" style="color:var(--fire-orange)"></i> Background Sound</span>
+  <!-- Audio Background Player (Avto ijro) -->
+  <audio id="bgMusic" loop autoplay src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"></audio>
+
+  <!-- Header -->
+  <div class="header">
+    <div class="logo"><i class="fa-solid fa-fire-flame-curved"></i> FlayPay</div>
+    <div style="font-size:12px; color:var(--text-sub);"><i class="fa-solid fa-music" style="color:var(--fire-orange)"></i> Music ON</div>
   </div>
 
   <!-- PAGE 1: ASOSIY -->
   <div id="p-asosiy" class="page active">
-    <div class="card-box" style="background: linear-gradient(135deg, #22120e 0%, #151720 100%);">
-      <span style="font-size:12px; color:var(--text-sub);">Sizning Balansingiz</span>
-      <div style="font-size:28px; font-weight:800; margin:6px 0;" id="userBalance">0 so'm</div>
-      <button class="btn-fire" onclick="switchPage('toldirish')"><i class="fa-solid fa-plus"></i> Balansni to'ldirish</button>
+    <div class="balance-card">
+      <span style="font-size: 12px; color: var(--text-sub);">Balans</span>
+      <div class="balance-val">0 so'm</div>
+      <button class="btn-fire" onclick="switchPage('toldirish')"><i class="fa-solid fa-plus"></i> To'ldirish</button>
     </div>
 
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px;">
-      <button class="btn-fire" style="background:#1c1d26;" onclick="window.open('https://t.me/arkootzif', '_blank')"><i class="fa-solid fa-bullhorn" style="color:var(--fire-orange)"></i> Reklama</button>
-      <button class="btn-fire" style="background:#1c1d26;" onclick="window.open('https://t.me/x7fan', '_blank')"><i class="fa-solid fa-headset" style="color:var(--fire-yellow)"></i> Support</button>
+    <div class="action-grid">
+      <div class="action-card" onclick="window.open('https://t.me/arkootzif', '_blank')">
+        <i class="fa-solid fa-bullhorn"></i> Reklama
+      </div>
+      <div class="action-card" onclick="window.open('https://t.me/x7fan', '_blank')">
+        <i class="fa-solid fa-headset"></i> Support
+      </div>
     </div>
 
-    <div style="font-size:16px; font-weight:800; margin:16px 0 10px;"><i class="fa-solid fa-gamepad" style="color:var(--fire-orange)"></i> O'yinlar</div>
-    <div id="gamesContainer" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-      <!-- Admin panel orqali qo'shilgan o'yinlar ro'yxati -->
+    <!-- 3 ta Banner Carousel (Admin qoyadi) -->
+    <div class="banner-container" id="bannerSlider">
+      <div class="banner-slide active" style="background-image: url('https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800');"></div>
     </div>
 
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:16px;">
-      <button class="btn-fire" style="background:#1a1b24;" onclick="openTopModal()"><i class="fa-solid fa-trophy" style="color:var(--fire-yellow)"></i> TOP reyting</button>
-      <button class="btn-fire" style="background:#1a1b24;" onclick="openReviewModal()"><i class="fa-solid fa-star" style="color:var(--fire-orange)"></i> Fikr qoldirish</button>
+    <!-- O'yinlar (Bo'sh turadi, Admin qo'shadi) -->
+    <div class="sec-title"><i class="fa-solid fa-gamepad"></i> O'yinlar</div>
+    <div class="games-grid" id="gamesGrid">
+      <div style="grid-column: 1/-1; text-align:center; color:var(--text-sub); padding:20px;">
+        Hozircha o'yinlar qo'shilmadi.
+      </div>
+    </div>
+
+    <!-- Top & Review Buttons -->
+    <div class="action-grid" style="margin-top:16px;">
+      <button class="btn-fire" style="justify-content:center;" onclick="openTopModal()"><i class="fa-solid fa-trophy"></i> TOP Foydalanuvchilar</button>
+      <button class="btn-fire" style="justify-content:center; background:#1e1e24;" onclick="openReviewModal()"><i class="fa-solid fa-pen"></i> Fikr qoldirish</button>
+    </div>
+
+    <!-- Dynamic Reviews -->
+    <div class="sec-title"><i class="fa-solid fa-comments"></i> Mijozlar fikri</div>
+    <div class="reviews-box" id="reviewsContainer">
+      <div style="text-align:center; color:var(--text-sub); font-size:12px;">Hali fikrlar yo'q. Birinchi bo'lib fikr qoldiring!</div>
     </div>
   </div>
 
-  <!-- PAGE 1.1: PUBG PRODUCT VIEW (SKRINSHOTINGIZ NUSHASI) -->
-  <div id="p-pubg" class="page">
+  <!-- PAGE 1.1: PUBG/GAME INNER (SKRINSHOTINGIZ NUSHASI) -->
+  <div id="p-gameinner" class="page">
     <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
-      <button class="back-btn" onclick="switchPage('asosiy')"><i class="fa-solid fa-arrow-left"></i></button>
-      <h3 id="selectedGameTitle">PUBG Mobile (Auto)</h3>
+      <button class="btn-fire" style="padding:6px 12px;" onclick="switchPage('asosiy')"><i class="fa-solid fa-arrow-left"></i> Orqaga</button>
+      <h3 id="innerGameTitle">PUBG Mobile</h3>
     </div>
 
-    <img src="https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800" class="game-banner" alt="Banner">
+    <div class="banner-container" style="height:150px; margin-bottom:14px;">
+      <div id="innerGameImg" class="banner-slide active" style="background-image: url('https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800');"></div>
+    </div>
 
-    <div class="card-box">
+    <div style="background:var(--card-bg); border:1px solid var(--card-border); border-radius:16px; padding:14px; margin-bottom:14px;">
       <div style="font-size:13px; font-weight:700; margin-bottom:6px;">Player ID kiriting:</div>
-      <div class="id-check-box">
-        <input type="number" id="playerIdInput" class="id-input" placeholder="Masalan: 51472827">
-        <button class="btn-fire" style="width:auto; padding:0 14px;" onclick="checkPlayerID()">Tekshirish</button>
+      <div style="display:flex; gap:8px;">
+        <input type="number" id="playerGameId" class="amount-input" style="margin:0; font-size:14px; padding:10px;" placeholder="Masalan: 51472827">
+        <button class="btn-fire" onclick="verifyPlayerId()">Tekshirish</button>
       </div>
-      <div id="idStatus" style="font-size:12px; font-weight:600;"></div>
+      <div id="idCheckResult" style="font-size:12px; margin-top:8px; font-weight:700;"></div>
     </div>
 
     <div style="font-size:15px; font-weight:800; margin-bottom:10px;">Paketni tanlang</div>
-    <div class="uc-grid" id="ucPackagesContainer">
-      <!-- Paketlar dinamik joylashadi -->
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+      <div style="background:var(--card-bg); border:1px solid rgba(255,255,255,0.08); border-radius:14px; padding:14px; text-align:center; cursor:pointer;" onclick="alert('Xarid qilindi!')">
+        <b style="color:var(--fire-yellow);">60 UC</b>
+        <div style="font-size:12px; color:var(--text-sub); margin-top:4px;">11 700 so'm</div>
+      </div>
+      <div style="background:var(--card-bg); border:1px solid rgba(255,255,255,0.08); border-radius:14px; padding:14px; text-align:center; cursor:pointer;" onclick="alert('Xarid qilindi!')">
+        <b style="color:var(--fire-yellow);">325 UC</b>
+        <div style="font-size:12px; color:var(--text-sub); margin-top:4px;">59 000 so'm</div>
+      </div>
     </div>
   </div>
 
-  <!-- PAGE 2: TO'LDIRISH & PAYMENT TIMER -->
+  <!-- PAGE 2: TO'LDIRISH -->
   <div id="p-toldirish" class="page">
-    <div class="card-box">
-      <div style="font-size:14px; font-weight:700; margin-bottom:10px;">To'lov Usulini Tanlang</div>
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-        <button class="btn-fire" style="background:#1a1b24; border:1px solid var(--fire-orange);" id="btnUzcard">UZCARD</button>
-        <button class="btn-fire" style="background:#1a1b24;" id="btnHumo">HUMO</button>
-      </div>
-      <input type="number" id="depAmountInput" class="id-input" style="width:100%; font-size:20px; text-align:center; margin:14px 0;" value="50000">
-      <button class="btn-fire" onclick="startPaymentProcess()">Davom etish</button>
+    <div class="sec-title" style="margin-top:0;"><i class="fa-solid fa-wallet"></i> To'lov usuli</div>
+    <div class="pay-methods">
+      <div class="pay-card active"><i class="fa-solid fa-credit-card" style="color:var(--fire-orange)"></i> <b>UZCARD</b></div>
+      <div class="pay-card"><i class="fa-solid fa-credit-card" style="color:var(--fire-yellow)"></i> <b>HUMO</b></div>
     </div>
+
+    <div style="font-size:13px; color:var(--text-sub);">Summani kiriting</div>
+    <input type="number" class="amount-input" id="depAmount" value="50000">
+
+    <div class="quick-chips">
+      <div class="chip" onclick="setAmt(50000)">50k</div>
+      <div class="chip" onclick="setAmt(100000)">100k</div>
+      <div class="chip" onclick="setAmt(200000)">200k</div>
+      <div class="chip" onclick="setAmt(500000)">500k</div>
+    </div>
+
+    <button class="btn-fire" style="width:100%; margin-top:16px; justify-content:center;" onclick="startPayTimer()">Davom etish</button>
   </div>
 
+  <!-- PAGE 2.1: PAY STEP WITH 3-MIN FIRE TIMER -->
   <div id="p-paystep" class="page">
-    <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
-      <button class="back-btn" onclick="switchPage('toldirish')"><i class="fa-solid fa-arrow-left"></i></button>
-      <h3>To'lovni amalga oshirish</h3>
-    </div>
+    <div class="sec-title" style="margin-top:0;" onclick="switchPage('toldirish')"><i class="fa-solid fa-arrow-left"></i> Orqaga</div>
+    
+    <div class="timer-fire" id="payCountdown">03:00</div>
 
-    <div class="card-box" style="text-align:center;">
-      <div style="font-size:12px; color:var(--text-sub);">To'lov uchun berilgan vaqt:</div>
-      <div class="timer-box" id="payTimer">03:00</div>
-      <div style="font-size:13px; color:var(--text-sub); margin-top:8px;">Karta raqami:</div>
-      <div style="font-size:18px; font-weight:800; margin:4px 0; color:var(--fire-yellow);" id="cardNumDisplay">5614 6821 1531 3746</div>
-      <button class="btn-fire" style="margin-top:10px;" onclick="copyCardNum()"><i class="fa-solid fa-copy"></i> Nusxalash</button>
-    </div>
-
-    <button class="btn-fire" style="background:#00b894;" onclick="submitDepositRequest()">To'lovni amalga oshirdim</button>
-  </div>
-
-  <!-- PAGE 3: BUYURTMALAR (TARIX) -->
-  <div id="p-tarix" class="page">
-    <h3>Buyurtmalar tarixi</h3>
-    <div id="ordersContainer" style="margin-top:12px;">
-      <div style="text-align:center; color:var(--text-sub); padding:40px 0;">Sizda hali xaridlar mavjud emas.</div>
-    </div>
-  </div>
-
-  <!-- PAGE 4: PROFIL & REFERAL SYSTEM -->
-  <div id="p-profil" class="page">
-    <div style="text-align:center; padding:10px 0;">
-      <img id="userAvatar" src="https://cdn-icons-png.flaticon.com/512/3135/3135715.png" style="width:70px; height:70px; border-radius:50%; border:2px solid var(--fire-orange);" alt="Avatar">
-      <h3 id="userNameDisplay" style="margin-top:6px;">Zohir</h3>
-      <p id="userIDDisplay" style="font-size:12px; color:var(--text-sub);">ID: --</p>
-    </div>
-
-    <div class="card-box" onclick="openReferralModal()" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between; margin-top:14px;">
+    <div class="copy-box">
       <div>
-        <div style="font-weight:700; font-size:14px;"><i class="fa-solid fa-users" style="color:var(--fire-orange)"></i> Referal Dasturi</div>
-        <div style="font-size:11px; color:var(--text-sub);">Har bir do'stingiz uchun 200 so'm oling!</div>
+        <div style="font-size:11px; color:var(--text-sub);">Karta raqami</div>
+        <div style="font-size:18px; font-weight:800; letter-spacing:1px;">5614 6821 1531 3746</div>
+        <div style="font-size:11px; color:var(--fire-yellow);">ULUG'BEK MAQSUDOV</div>
       </div>
-      <i class="fa-solid fa-chevron-right" style="color:var(--text-sub);"></i>
+      <button class="btn-fire" style="padding:8px 12px; font-size:12px;" onclick="copyCard()"><i class="fa-solid fa-copy"></i> Nusxa</button>
+    </div>
+
+    <button class="btn-fire" style="width:100%; justify-content:center; background:#00b894;" onclick="submitDeposit()">To'lovni amalga oshirdim</button>
+  </div>
+
+  <!-- PAGE 3: BUYURTMALAR (TARIX - BO'SH TURADI) -->
+  <div id="p-tarix" class="page">
+    <div class="sec-title" style="margin-top:0;"><i class="fa-solid fa-clock-rotate-left"></i> Buyurtmalar tarixi</div>
+    <div id="historyContainer" style="text-align:center; color:var(--text-sub); padding:40px 0;">
+      Sizda hali xaridlar mavjud emas.
     </div>
   </div>
 
-  <!-- REFERRAL MODAL -->
-  <div id="refModal" class="modal">
-    <div class="modal-content">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-        <h4>Referal Dasturi</h4>
-        <i class="fa-solid fa-xmark" onclick="closeModal('refModal')" style="cursor:pointer;"></i>
-      </div>
-      <p style="font-size:12px; color:var(--text-sub); margin-bottom:12px;">
-        Assalomu alaykum! Ushbu havolani do'stlaringizga yuboring. Do'stingiz kirganda sizga **200 so'm**, u xarid qilganda esa **2% keshbek** avtomatik hisobingizga o'tadi!
-      </p>
-      <button class="btn-fire" onclick="copyRefLink()"><i class="fa-solid fa-link"></i> Referal havolasini nusxalash</button>
+  <!-- PAGE 4: PROFIL & REFERAL -->
+  <div id="p-profil" class="page">
+    <div style="text-align:center; padding:20px 0;">
+      <img id="userProfPic" src="https://cdn-icons-png.flaticon.com/512/3135/3135715.png" style="width:70px; height:70px; border-radius:50%; border:2px solid var(--fire-orange);" alt="Avatar">
+      <h3 id="profName" style="margin-top:10px;">Zohir</h3>
+      <p id="profId" style="font-size:12px; color:var(--text-sub);">ID: --</p>
+    </div>
+
+    <div class="action-card" style="margin-bottom:10px;" onclick="openRefModal()">
+      <i class="fa-solid fa-user-plus"></i> Referal dasturi
     </div>
   </div>
 
-  <!-- TOP REYTING MODAL -->
+  <!-- MODALS -->
   <div id="topModal" class="modal">
     <div class="modal-content">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-        <h4><i class="fa-solid fa-trophy" style="color:var(--fire-yellow);"></i> TOP Xaridorlar</h4>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+        <h3><i class="fa-solid fa-trophy" style="color:var(--fire-yellow)"></i> TOP Foydalanuvchilar</h3>
         <i class="fa-solid fa-xmark" onclick="closeModal('topModal')" style="cursor:pointer;"></i>
       </div>
-      <div id="topListContainer" style="font-size:13px; color:var(--text-sub); text-align:center; padding:20px 0;">
-        Hozircha xaridlar yo'q. Birinchi bo'ling!
+      <div id="topList" style="text-align:center; color:var(--text-sub); padding:20px 0;">
+        Hozircha xaridorlar yo'q. Birinchi bo'ling!
       </div>
     </div>
   </div>
 
-  <!-- NAVBAR -->
+  <div id="reviewModal" class="modal">
+    <div class="modal-content">
+      <h3 style="margin-bottom:10px;">Fikr va Yulduzcha qoldirish</h3>
+      <div style="display:flex; gap:6px; font-size:20px; color:var(--fire-yellow); margin-bottom:10px;">
+        <i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i>
+      </div>
+      <textarea id="reviewTxt" style="width:100%; height:80px; background:#000; border:1px solid var(--card-border); color:#fff; padding:10px; border-radius:10px; outline:none;" placeholder="Xizmat haqida fikringiz..."></textarea>
+      <button class="btn-fire" style="width:100%; margin-top:10px; justify-content:center;" onclick="sendReview()">Yuborish</button>
+    </div>
+  </div>
+
+  <div id="refModal" class="modal">
+    <div class="modal-content">
+      <h3 style="margin-bottom:10px;">Referal Dasturi</h3>
+      <p style="font-size:12px; color:var(--text-sub); margin-bottom:12px;">
+        Assalomu alaykum! Buni do'stingizga tashlasangiz, sizning nomingizdan kirsa sizga **200 so'm** pul o'tkaziladi. Agar ushbu odam xarid qilsa, sizga **2%** keshbek tushadi!
+      </p>
+      <button class="btn-fire" style="width:100%; justify-content:center;" onclick="copyRefCode()"><i class="fa-solid fa-copy"></i> Referal kodni nusxalash</button>
+    </div>
+  </div>
+
+  <!-- Bottom Navigation -->
   <div class="navbar">
     <div class="nav-link active" onclick="switchPage('asosiy')"><i class="fa-solid fa-house"></i><span>Asosiy</span></div>
     <div class="nav-link" onclick="switchPage('toldirish')"><i class="fa-solid fa-wallet"></i><span>To'ldirish</span></div>
@@ -209,85 +265,101 @@
 
   <script>
     const tg = window.Telegram?.WebApp;
-    if (tg) { tg.expand(); }
+    if(tg) tg.expand();
 
-    const user = tg?.initDataUnsafe?.user || { id: 7651404790, first_name: "Zohir", username: "x7fan", photo_url: "" };
+    const currentUser = tg?.initDataUnsafe?.user || { id: 7651404790, first_name: "Zohir", username: "x7fan", photo_url: "" };
 
-    // Profil sozlamalari
-    document.getElementById('userNameDisplay').innerText = user.first_name || 'Zohir';
-    document.getElementById('userIDDisplay').innerText = "ID: " + user.id;
-    if (user.photo_url) { document.getElementById('userAvatar').src = user.photo_url; }
+    document.getElementById('profName').innerText = currentUser.first_name || 'Zohir';
+    document.getElementById('profId').innerText = "ID: " + currentUser.id;
+    if(currentUser.photo_url) document.getElementById('userProfPic').src = currentUser.photo_url;
 
-    // Dynamic Navigation
+    // Load Backend Dynamic Data
+    async function loadData() {
+      try {
+        const res = await fetch('/api/settings');
+        const data = await res.json();
+
+        if(data.musicUrl) document.getElementById('bgMusic').src = data.musicUrl;
+
+        // Banners
+        if(data.banners && data.banners.length > 0) {
+          const bContainer = document.getElementById('bannerSlider');
+          bContainer.innerHTML = data.banners.map((url, i) => `<div class="banner-slide ${i===0?'active':''}" style="background-image: url('${url}');"></div>`).join('');
+        }
+
+        // Games
+        if(data.games && data.games.length > 0) {
+          const gGrid = document.getElementById('gamesGrid');
+          gGrid.innerHTML = data.games.map(g => `
+            <div class="game-item" onclick="openGameInner('${g.title}', '${g.img}')">
+              <img src="${g.img}" alt="${g.title}">
+              <div style="font-weight:700; font-size:14px;">${g.title}</div>
+            </div>
+          `).join('');
+        }
+      } catch(e){}
+    }
+    loadData();
+
     function switchPage(pageId) {
       document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
       document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
       document.getElementById('p-' + pageId)?.classList.add('active');
 
       const idx = ['asosiy', 'toldirish', 'tarix', 'profil'].indexOf(pageId);
-      if (idx !== -1) document.querySelectorAll('.nav-link')[idx].classList.add('active');
+      if(idx !== -1) document.querySelectorAll('.nav-link')[idx].classList.add('active');
     }
 
-    // 8-Digit Player ID Checker
-    function checkPlayerID() {
-      const val = document.getElementById('playerIdInput').value.trim();
-      const status = document.getElementById('idStatus');
-      if (val.length >= 8) {
-        status.style.color = "#00b894";
-        status.innerText = "✅ Player ID topildi (" + val + ")";
+    function openGameInner(title, img) {
+      document.getElementById('innerGameTitle').innerText = title;
+      document.getElementById('innerGameImg').style.backgroundImage = `url('${img}')`;
+      switchPage('gameinner');
+    }
+
+    function verifyPlayerId() {
+      const val = document.getElementById('playerGameId').value.trim();
+      const res = document.getElementById('idCheckResult');
+      if(val.length >= 8) {
+        res.style.color = "#00b894";
+        res.innerText = "Ha, bu ID bor ✅ (" + val + ")";
       } else {
-        status.style.color = "#ff7675";
-        status.innerText = "❌ ID topilmadi yoki xato kiritildi!";
+        res.style.color = "#ff7675";
+        res.innerText = "ID topilmadi ❌";
       }
     }
 
-    // 3 Minute Payment Countdown Timer
-    let timerInterval;
-    function startPaymentProcess() {
+    let timer;
+    function startPayTimer() {
       switchPage('paystep');
-      let timeLeft = 180; // 3 minut
-      clearInterval(timerInterval);
-
-      timerInterval = setInterval(() => {
-        let min = Math.floor(timeLeft / 60);
-        let sec = timeLeft % 60;
-        document.getElementById('payTimer').innerText = `${min < 10 ? '0' : ''}${min}:${sec < 10 ? '0' : ''}${sec}`;
-
-        if (timeLeft <= 0) {
-          clearInterval(timerInterval);
-          alert("To'lov vaqti tugadi! Qaytadan urinib ko'ring.");
-          switchPage('toldirish');
-        }
-        timeLeft--;
+      let sec = 180;
+      clearInterval(timer);
+      timer = setInterval(() => {
+        let m = Math.floor(sec / 60);
+        let s = sec % 60;
+        document.getElementById('payCountdown').innerText = `${m<10?'0':''}${m}:${s<10?'0':''}${s}`;
+        if(sec <= 0) { clearInterval(timer); alert("To'lov vaqti tugadi!"); switchPage('toldirish'); }
+        sec--;
       }, 1000);
     }
 
-    // Deposit API Request to Backend
-    async function submitDepositRequest() {
-      const amount = document.getElementById('depAmountInput').value;
-      try {
-        await fetch('/api/deposit', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: user.id, username: user.username, amount, method: 'UZCARD/HUMO' })
-        });
-        alert("To'lov so'rovi adminga yuborildi. Tasdiqlangach hisobingizga tushadi!");
-        switchPage('asosiy');
-      } catch (err) {
-        alert("Xatolik yuz berdi. Telegram adminga yozing: @x7fan");
-      }
+    async function submitDeposit() {
+      const amt = document.getElementById('depAmount').value;
+      await fetch('/api/deposit', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ userId: currentUser.id, username: currentUser.username, amount: amt })
+      });
+      alert("To'lov so'rovi adminga yuborildi!");
+      switchPage('asosiy');
     }
 
-    // Helpers
-    function copyCardNum() { navigator.clipboard.writeText('5614682115313746'); alert("Karta raqami nusxalandi!"); }
-    function openReferralModal() { document.getElementById('refModal').style.display = 'flex'; }
+    function setAmt(v) { document.getElementById('depAmount').value = v; }
+    function copyCard() { navigator.clipboard.writeText('5614682115313746'); alert('Karta raqami nusxalandi!'); }
     function openTopModal() { document.getElementById('topModal').style.display = 'flex'; }
+    function openReviewModal() { document.getElementById('reviewModal').style.display = 'flex'; }
+    function openRefModal() { document.getElementById('refModal').style.display = 'flex'; }
     function closeModal(id) { document.getElementById(id).style.display = 'none'; }
-    function copyRefLink() {
-      const link = `https://t.me/OlovPayBot?start=${user.id}`;
-      navigator.clipboard.writeText(link);
-      alert("Referal havolasi nusxalandi!");
-    }
+    function copyRefCode() { navigator.clipboard.writeText(`https://t.me/FlayPayBot?start=${currentUser.id}`); alert('Referal havola nusxalandi!'); }
   </script>
 </body>
 </html>
