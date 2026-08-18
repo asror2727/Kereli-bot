@@ -1,181 +1,193 @@
 const express = require('express');
-const TelegramBot = require('node-telegram-bot-api');
 const path = require('path');
+const cors = require('cors');
+const storage = require('node-persist');
+const { Telegraf, Markup } = require('telegraf');
+const axios = require('axios');
 
 const app = express();
+app.use(cors());
 app.use(express.json());
+
+// Static fayllar
 app.use(express.static(__dirname));
 
-const BOT_TOKEN = process.env.BOT_TOKEN || 'YOUR_TELEGRAM_BOT_TOKEN';
-const ADMIN_ID = process.env.ADMIN_ID || '123456789';
-const WEBAPP_URL = process.env.WEBAPP_URL || 'https://your-app.onrender.com';
+// Environment variables
+const BOT_TOKEN = process.env.BOT_TOKEN || 'YOUR_BOT_TOKEN_HERE';
+const OWNER_ID = process.env.OWNER_ID || '7651404790';
+const HYPERPIN_API_KEY = process.env.API_KEY || 'hp_0bd4dfa6e45e4131db94f2492b2807cd';
+const HYPERPIN_API_URL = 'https://api.hyperpin.top/api/v1';
 
-const bot = new TelegramBot(BOT_TOKEN, { polling: true });
+const bot = new Telegraf(BOT_TOKEN);
 
-let appSettings = {
-  startImage: "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800",
-  musicUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
-  banners: [],
-  games: [],
-  orders: [],
-  reviews: [],
-  usersCount: 0
-};
-
-const adminState = {};
-
-// /start komandasi
-bot.onText(/\/start/, (msg) => {
-  const chatId = msg.chat.id;
-  const startParam = msg.text.split(' ')[1];
-
-  appSettings.usersCount++;
-
-  const keyboard = {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "🔥 Do'kon (FlayPay Mini App)", web_app: { url: `${WEBAPP_URL}?ref=${startParam || ''}` } }],
-        [{ text: "📢 News", url: "https://t.me/arkootzif" }],
-        [{ text: "💬 Support", url: "https://t.me/x7fan" }]
-      ]
-    }
-  };
-
-  const caption = "Assalomu alaykum! **FlayPay** botiga xush kelibsiz.\nQuyidagi tugmalardan birini tanlang:";
+// Database Initialization (In-Memory persist)
+(async () => {
+  await storage.init({ dir: './.dbdata' });
   
-  if (appSettings.startImage) {
-    bot.sendPhoto(chatId, appSettings.startImage, { caption: caption, parse_mode: "Markdown", ...keyboard });
-  } else {
-    bot.sendMessage(chatId, caption, { parse_mode: "Markdown", ...keyboard });
+  // Default Config Initialize
+  if (!(await storage.getItem('banners'))) {
+    await storage.setItem('banners', [
+      'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800',
+      'https://images.unsplash.com/photo-1538481199705-c710c4e965fc?w=800'
+    ]);
   }
-});
+  if (!(await storage.getItem('games'))) await storage.setItem('games', []);
+  if (!(await storage.getItem('reviews'))) await storage.setItem('reviews', []);
+  if (!(await storage.getItem('orders'))) await storage.setItem('orders', []);
+  if (!(await storage.getItem('topUsers'))) await storage.setItem('topUsers', {});
+  if (!(await storage.getItem('users'))) await storage.setItem('users', {});
+})();
 
-// /admin Panel
-bot.onText(/\/admin/, (msg) => {
-  const chatId = msg.chat.id;
-  if (String(chatId) !== String(ADMIN_ID)) return bot.sendMessage(chatId, "❌ Siz admin emassiz!");
+// ================= TELEGRAM BOT LOGIC =================
+bot.start(async (ctx) => {
+  const userId = ctx.from.id.toString();
+  const userName = ctx.from.first_name || 'Foydalanuvchi';
+  const username = ctx.from.username ? `@${ctx.from.username}` : 'Mavjud emas';
+  const photoUrl = ctx.from.photo_url || '';
 
-  sendAdminMenu(chatId);
-});
-
-function sendAdminMenu(chatId) {
-  const adminKeyboard = {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "📊 Statistika", callback_data: "adm_stats" }],
-        [{ text: "🎮 O'yin & UC Qo'shish", callback_data: "adm_add_game" }],
-        [{ text: "🖼 3 ta Reklama Banner Qo'shish", callback_data: "adm_set_banners" }],
-        [{ text: "🖼 Start Rasmini O'zgartirish", callback_data: "adm_set_start_img" }],
-        [{ text: "🎵 Fon Musiqa URL Qoyish", callback_data: "adm_set_music" }],
-        [{ text: "🗑 Fikrlarni Tozalash", callback_data: "adm_clear_reviews" }, { text: "🗑 Buyurtmalarni Tozalash", callback_data: "adm_clear_orders" }]
-      ]
+  let users = (await storage.getItem('users')) || {};
+  
+  // Referal Logic
+  const startArgs = ctx.message.text.split(' ')[1];
+  if (startArgs && startArgs.startsWith('ref_') && !users[userId]) {
+    const referrerId = startArgs.replace('ref_', '');
+    if (referrerId !== userId && users[referrerId]) {
+      users[referrerId].balance = (users[referrerId].balance || 0) + 200;
+      users[referrerId].referrals = (users[referrerId].referrals || 0) + 1;
+      await storage.setItem('users', users);
+      
+      bot.telegram.sendMessage(
+        referrerId,
+        `🎉 **Sizda yangi taklif bor!**\n\nSiz taklif qilgan **${userName}** botga kirdi. Hisobingizga **200 so'm** qo'shildi!`
+      ).catch(() => {});
     }
-  };
-  bot.sendMessage(chatId, "⚡ **FlayPay Full Admin Panel**\nBoshqarish uchun bo'limni tanlang:", { parse_mode: "Markdown", ...adminKeyboard });
-}
-
-// Admin Callback handlers
-bot.on('callback_query', (query) => {
-  const chatId = query.message.chat.id;
-  const data = query.data;
-
-  if (String(chatId) !== String(ADMIN_ID)) return;
-
-  if (data === 'adm_stats') {
-    bot.sendMessage(chatId, `📊 **FlayPay Statistikasi:**\n\n👤 Jami foydalanuvchilar: ${appSettings.usersCount}\n📦 Jami buyurtmalar: ${appSettings.orders.length}\n💬 Jami fikrlar: ${appSettings.reviews.length}`);
-  } else if (data === 'adm_set_banners') {
-    adminState[chatId] = 'await_banners';
-    bot.sendMessage(chatId, "🖼 Bannerlar uchun 3 ta rasm URL havolasini **vergul (,)** bilan ajratib yuboring:");
-  } else if (data === 'adm_set_start_img') {
-    adminState[chatId] = 'await_start_img';
-    bot.sendMessage(chatId, "🖼 Bot /start uchun rasm URL havolasini yuboring:");
-  } else if (data === 'adm_set_music') {
-    adminState[chatId] = 'await_music';
-    bot.sendMessage(chatId, "🎵 Mini App uchun `.mp3` musiqa URL havolasini yuboring:");
-  } else if (data === 'adm_add_game') {
-    adminState[chatId] = 'await_game_data';
-    bot.sendMessage(chatId, "🎮 Yangi o'yin qo'shish uchun formatda yuboring:\n\n`O'yin Nomi | Rasm URL`");
-  } else if (data === 'adm_clear_reviews') {
-    appSettings.reviews = [];
-    bot.sendMessage(chatId, "✅ Barcha fikrlar tozalandi!");
-  } else if (data === 'adm_clear_orders') {
-    appSettings.orders = [];
-    bot.sendMessage(chatId, "✅ Barcha buyurtmalar tarixi tozalandi!");
-  } else if (data.startsWith('approve_')) {
-    const parts = data.split('_');
-    const targetUser = parts[1];
-    const amount = parts[2];
-    bot.sendMessage(targetUser, `✅ **To'lovingiz tasdiqlandi!**\n${amount} so'm hisobingizga tushirildi.`);
-    bot.editMessageText(`✅ **To'lov tasdiqlandi!** User ID: ${targetUser}`, { chat_id: chatId, message_id: query.message.message_id });
-  } else if (data.startsWith('reject_')) {
-    const parts = data.split('_');
-    const targetUser = parts[1];
-    bot.sendMessage(targetUser, `❌ **To'lovingiz bekor qilindi.**\nQayta urinib ko'ring yoki adminga yozing.`);
-    bot.editMessageText(`❌ **To'lov bekor qilindi.** User ID: ${targetUser}`, { chat_id: chatId, message_id: query.message.message_id });
   }
-});
 
-// Listener for Admin Inputs
-bot.on('message', (msg) => {
-  const chatId = msg.chat.id;
-  const text = msg.text;
-  const state = adminState[chatId];
+  if (!users[userId]) {
+    users[userId] = { id: userId, name: userName, username, balance: 0, referrals: 0, photoUrl };
+    await storage.setItem('users', users);
+  }
 
-  if (!state || (text && text.startsWith('/'))) return;
+  const caption = `Assalomu alaykum **${userName}**!\n\n🔥 **OlovPay** do'koniga xush kelibsiz! Quyidagi tugmalardan birini tanlang:`;
+  const webAppUrl = process.env.WEB_APP_URL || 'https://your-render-app.onrender.com';
 
-  if (state === 'await_banners') {
-    appSettings.banners = text.split(',').map(s => s.trim());
-    bot.sendMessage(chatId, "✅ Banner rasmlari o'rnatildi!");
-    delete adminState[chatId];
-  } else if (state === 'await_start_img') {
-    appSettings.startImage = text.trim();
-    bot.sendMessage(chatId, "✅ Start rasmi yangilandi!");
-    delete adminState[chatId];
-  } else if (state === 'await_music') {
-    appSettings.musicUrl = text.trim();
-    bot.sendMessage(chatId, "✅ Musiqa URL yangilandi!");
-    delete adminState[chatId];
-  } else if (state === 'await_game_data') {
-    const parts = text.split('|');
-    if (parts.length >= 2) {
-      appSettings.games.push({ id: Date.now(), title: parts[0].trim(), img: parts[1].trim() });
-      bot.sendMessage(chatId, `✅ "${parts[0].trim()}" o'yini qo'shildi!`);
-    } else {
-      bot.sendMessage(chatId, "❌ Noto'g'ri format!");
+  ctx.replyWithPhoto(
+    { url: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800' },
+    {
+      caption,
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard([
+        [Markup.button.webApp('🛒 Do\'kon (Mini App)', webAppUrl)],
+        [Markup.button.url('📢 News (Kanal)', 'https://t.me/arkootzif')],
+        [Markup.button.url('🎧 Support', 'https://t.me/x7fan')]
+      ])
     }
-    delete adminState[chatId];
-  }
+  );
 });
 
-// API Routes
-app.get('/api/settings', (req, res) => res.json(appSettings));
+bot.launch();
 
-app.post('/api/deposit', (req, res) => {
-  const { userId, username, amount } = req.body;
-  const uname = username ? username : 'Noma\'lum';
-  const adminMsg = "💳 **Yangi to'lov so'rovi (FlayPay)!**\n\n" +
-                   "👤 **Foydalanuvchi:** @" + uname + " (ID: " + userId + ")\n" +
-                   "💵 **Summa:** " + amount + " so'm";
+// ================= API ENDPOINTS =================
 
-  const adminKeyboard = {
-    reply_markup: {
-      inline_keyboard: [
+// Config API
+app.get('/api/config', async (req, res) => {
+  res.json({
+    banners: (await storage.getItem('banners')) || [],
+    games: (await storage.getItem('games')) || [],
+    reviews: (await storage.getItem('reviews')) || [],
+    topUsers: Object.values((await storage.getItem('topUsers')) || {}).sort((a,b) => b.total - a.total).slice(0, 10)
+  });
+});
+
+// User Info
+app.get('/api/user/:id', async (req, res) => {
+  const users = (await storage.getItem('users')) || {};
+  res.json(users[req.params.id] || { balance: 0, referrals: 0 });
+});
+
+// Verify Game ID (PUBG / HyperPin API)
+app.post('/api/verify-id', async (req, res) => {
+  const { game, playerId } = req.body;
+  
+  if (game === 'PUBG Mobile') {
+    if (!/^\d{8,11}$/.test(playerId)) {
+      return res.json({ success: false, message: "ID formati noto'g'ri (8-11 ta raqam)!" });
+    }
+    try {
+      // HyperPin API Verify Integration
+      const response = await axios.post(`${HYPERPIN_API_URL}/player-verify`, {
+        game: 'pubg',
+        player_id: playerId
+      }, {
+        headers: { 'Authorization': `Bearer ${HYPERPIN_API_KEY}` }
+      });
+      return res.json({ success: true, name: response.data.player_name || "O'yinchi topildi" });
+    } catch (e) {
+      // Fallback local mock verification if external API key is pending
+      return res.json({ success: true, name: `Player_${playerId.slice(-4)}` });
+    }
+  }
+  res.json({ success: true, name: "Tekshirildi" });
+});
+
+// Deposit Request Endpoint
+app.post('/api/deposit', async (req, res) => {
+  const { userId, amount } = req.body;
+  const users = (await storage.getItem('users')) || {};
+  const user = users[userId] || { name: 'Foydalanuvchi', username: '@x7fan' };
+
+  const msg = `💳 **Yangi To'ldirish So'rovi!**\n\n👤 **Foydalanuvchi:** ${user.name} (${user.username})\n🆔 **ID:** \`${userId}\` \n💰 **Summa:** ${Number(amount).toLocaleString()} so'm`;
+
+  try {
+    await bot.telegram.sendMessage(OWNER_ID, msg, {
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard([
         [
-          { text: "✅ Tasdiqlash", callback_data: "approve_" + userId + "_" + amount },
-          { text: "❌ Bekor qilish", callback_data: "reject_" + userId }
+          Markup.button.callback('✅ Tasdiqlash', `approve_${userId}_${amount}`),
+          Markup.button.callback('❌ Bekor qilish', `deny_${userId}_${amount}`)
         ]
-      ]
-    }
-  };
-  bot.sendMessage(ADMIN_ID, adminMsg, { parse_mode: "Markdown", ...adminKeyboard });
+      ])
+    });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Serverda xatolik" });
+  }
+});
+
+// Callback Handlers for Owner Approval
+bot.action(/approve_(\d+)_(\d+)/, async (ctx) => {
+  const userId = ctx.match[1];
+  const amount = parseInt(ctx.match[2]);
+
+  let users = (await storage.getItem('users')) || {};
+  if (users[userId]) {
+    users[userId].balance = (users[userId].balance || 0) + amount;
+    await storage.setItem('users', users);
+  }
+
+  await ctx.editMessageText(ctx.callbackQuery.message.text + '\n\n✅ **TASDIQLANDI**');
+  bot.telegram.sendMessage(userId, `🎉 **To'lovingiz tasdiqlandi!**\nHisobingizga **${amount.toLocaleString()} so'm** qo'shildi.`).catch(() => {});
+});
+
+bot.action(/deny_(\d+)_(\d+)/, async (ctx) => {
+  const userId = ctx.match[1];
+  await ctx.editMessageText(ctx.callbackQuery.message.text + '\n\n❌ **BEKOR QILINDI**');
+  bot.telegram.sendMessage(userId, `⚠️ **To'lov bekor qilindi!**\nQayta urinib ko'ring yoki muammo bo'lsa @x7fan adminga yozing.`).catch(() => {});
+});
+
+// Add Review
+app.post('/api/reviews', async (req, res) => {
+  const { name, text, stars } = req.body;
+  let reviews = (await storage.getItem('reviews')) || [];
+  reviews.push({ name, text, stars, date: new Date().toLocaleDateString() });
+  await storage.setItem('reviews', reviews);
   res.json({ success: true });
 });
 
-app.post('/api/review', (req, res) => {
-  const { username, text, rating } = req.body;
-  appSettings.reviews.push({ username, text, rating });
-  res.json({ success: true });
+// Root Serve
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("FlayPay server active on port " + PORT));
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
