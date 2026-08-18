@@ -78,3 +78,26 @@ bot.on('callback_query', (query) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log("Server running on port " + PORT));
+
+// Admin panel komandasi (Faqat siz uchun)
+bot.onText(/\/admin/, (msg) => {
+  const chatId = msg.chat.id;
+
+  // Agar yozgan odam Admin bo'lmasa, javob bermaydi
+  if (String(chatId) !== String(ADMIN_ID)) {
+    return bot.sendMessage(chatId, "❌ Siz admin emassiz!");
+  }
+
+  const adminKeyboard = {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "🖼 Reklama bannerini o'zgartirish", callback_data: "admin_change_banner" }],
+        [{ text: "🎮 Yangi o'yin qo'shish", callback_data: "admin_add_game" }],
+        [{ text: "💬 Fikrlarni o'chirish", callback_data: "admin_clear_reviews" }],
+        [{ text: "📦 Buyurtmalarni o'chirish", callback_data: "admin_clear_orders" }]
+      ]
+    }
+  };
+
+  bot.sendMessage(chatId, "⚡ **OlovPay Admin Paneliga xush kelibsiz!**\nKerakli bo'limni tanlang:", { parse_mode: "Markdown", ...adminKeyboard });
+});
