@@ -9,6 +9,7 @@ function initBot() {
   }
 
   const bot = new TelegramBot(token, { polling: true });
+  bot.on('polling_error', (err) => console.error('Polling xatosi (e\'tibor bermasa ham bo\'ladi):', err.message));
   const webAppUrl = process.env.WEBAPP_URL;
   const channel = process.env.CHANNEL_USERNAME || 'arkootzif';
   const support = process.env.SUPPORT_USERNAME || 'x7fan';
