@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OlovPay — Admin</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+  :root{--bg:#0b0b0e;--card:#141419;--border:rgba(255,69,0,.25);--orange:#ff4500;--yellow:#ffaa00;--sub:#9a9ab0;}
+  *{box-sizing:border-box;margin:0;padding:0;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;}
+  body{background:var(--bg);color:#fff;padding-bottom:40px;}
+  .topbar{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);position:sticky;top:0;background:rgba(11,11,14,.9);backdrop-filter:blur(10px);z-index:10;}
+  .logo{font-size:19px;font-weight:900;background:linear-gradient(45deg,var(--orange),var(--yellow));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+  .wrap{max-width:720px;margin:0 auto;padding:20px 16px;}
+  .card{background:var(--card);border:1px solid rgba(255,255,255,.06);border-radius:16px;padding:18px;margin-bottom:18px;}
+  .card h3{font-size:15px;margin-bottom:14px;display:flex;align-items:center;gap:8px;}
+  .card h3 i{color:var(--orange);}
+  input,textarea,select{width:100%;background:#000;border:1px solid var(--border);border-radius:10px;padding:11px;color:#fff;font-size:13px;outline:none;margin-bottom:10px;}
+  label{font-size:11px;color:var(--sub);display:block;margin-bottom:4px;}
+  .btn{background:linear-gradient(90deg,var(--orange),var(--yellow));color:#fff;border:none;padding:10px 16px;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;}
+  .btn.ghost{background:#1e1e24;border:1px solid rgba(255,255,255,.08);}
+  .btn.danger{background:#3a1414;color:#ff6b6b;border:1px solid #5c1f1f;}
+  .btn.sm{padding:7px 12px;font-size:12px;}
+  .row{display:flex;gap:8px;flex-wrap:wrap;}
+  .banner-slot{border:1px dashed rgba(255,255,255,.15);border-radius:12px;padding:12px;margin-bottom:10px;}
+  .banner-slot img{width:100%;height:80px;object-fit:cover;border-radius:8px;margin-bottom:8px;display:none;}
+  .game-item{background:#000;border:1px solid rgba(255,255,255,.06);border-radius:12px;padding:12px;margin-bottom:12px;}
+  .game-head{display:flex;gap:10px;align-items:center;margin-bottom:10px;}
+  .game-head img{width:44px;height:44px;border-radius:8px;object-fit:cover;background:#141419;}
+  .pkg-row{display:flex;gap:6px;align-items:center;font-size:12px;background:var(--card);padding:6px 10px;border-radius:8px;margin-bottom:6px;}
+  .pkg-row span{flex:1;}
+  .tag{font-size:10px;background:rgba(255,69,0,.15);color:var(--orange);padding:2px 8px;border-radius:8px;font-weight:700;}
+  .dep-row{display:flex;justify-content:space-between;align-items:center;padding:10px;background:#000;border-radius:10px;margin-bottom:8px;font-size:12px;}
+  .status-pending{color:var(--yellow);}
+  .status-confirmed{color:#00d68f;}
+  .status-rejected{color:#ff5757;}
+  #loginBox{max-width:340px;margin:80px auto;text-align:center;}
+  #loginBox i{font-size:32px;color:var(--orange);margin-bottom:14px;}
+  .hidden{display:none;}
+  .tabs{display:flex;gap:8px;overflow-x:auto;padding:0 16px 12px;position:sticky;top:57px;background:var(--bg);z-index:9;}
+  .tab{padding:8px 14px;border-radius:20px;background:var(--card);font-size:12px;font-weight:700;white-space:nowrap;cursor:pointer;color:var(--sub);border:1px solid rgba(255,255,255,.06);}
+  .tab.active{background:linear-gradient(90deg,var(--orange),var(--yellow));color:#fff;}
+  .section{display:none;}
+  .section.active{display:block;}
+  .empty{text-align:center;color:var(--sub);font-size:12px;padding:20px;}
+</style>
+</head>
+<body>
+
+<div id="loginBox">
+  <i class="fa-solid fa-lock"></i>
+  <h2 style="margin-bottom:16px;">Admin panel</h2>
+  <input type="password" id="loginPass" placeholder="Parol">
+  <button class="btn" style="width:100%;" onclick="doLogin()">Kirish</button>
+  <div id="loginErr" style="color:#ff5757;font-size:12px;margin-top:10px;"></div>
+</div>
+
+<div id="app" class="hidden">
+  <div class="topbar">
+    <div class="logo"><i class="fa-solid fa-fire-flame-curved"></i> OlovPay Admin</div>
+    <button class="btn ghost sm" onclick="logout()">Chiqish</button>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-s="general" onclick="showSection('general')">Umumiy</div>
+    <div class="tab" data-s="banners" onclick="showSection('banners')">Bannerlar</div>
+    <div class="tab" data-s="games" onclick="showSection('games')">O'yinlar</div>
+    <div class="tab" data-s="top" onclick="showSection('top')">Top</div>
+    <div class="tab" data-s="deposits" onclick="showSection('deposits')">To'lovlar</div>
+    <div class="tab" data-s="orders" onclick="showSection('orders')">Buyurtmalar</div>
+  </div>
+
+  <div class="wrap">
+
+    <!-- GENERAL: splash logo -->
+    <div class="section active" id="s-general">
+      <div class="card">
+        <h3><i class="fa-solid fa-image"></i> Bot / Mini App logo (yuklanish ekrani)</h3>
+        <p style="font-size:12px;color:var(--sub);margin-bottom:10px;">Bu rasm mini app ochilganda "yuklanmoqda" ekranida va botning /start xabarida ko'rsatiladi.</p>
+        <img id="splashPreview" style="width:80px;height:80px;border-radius:16px;object-fit:cover;display:none;margin-bottom:10px;">
+        <input type="file" id="splashFile" accept="image/*">
+        <button class="btn" onclick="uploadSplash()">Saqlash</button>
+      </div>
+    </div>
+
+    <!-- BANNERS -->
+    <div class="section" id="s-banners">
+      <div class="card">
+        <h3><i class="fa-solid fa-panorama"></i> Reklama bannerlari (3 ta slot)</h3>
+        <div id="bannerSlots"></div>
+      </div>
+    </div>
+
+    <!-- GAMES -->
+    <div class="section" id="s-games">
+      <div class="card">
+        <h3><i class="fa-solid fa-plus"></i> Yangi o'yin qo'shish</h3>
+        <label>O'yin nomi</label>
+        <input type="text" id="newGameName" placeholder="Masalan: PUBG Mobile">
+        <label>Reyting (ixtiyoriy)</label>
+        <input type="text" id="newGameRating" placeholder="5 · 370">
+        <label>Banner rasm</label>
+        <input type="file" id="newGameImage" accept="image/*">
+        <button class="btn" onclick="addGame()">Qo'shish</button>
+      </div>
+      <div id="gamesList"></div>
+    </div>
+
+    <!-- TOP -->
+    <div class="section" id="s-top">
+      <div class="card">
+        <h3><i class="fa-solid fa-trophy"></i> TOP Xaridorlar ro'yxati</h3>
+        <p style="font-size:12px;color:var(--sub);margin-bottom:10px;">Har bir qatorni "Ism | izoh | summa" formatida kiriting (bitta qatorga bitta foydalanuvchi). Masalan: <code>Dilmurod | 12 buyurtma | 397 788 UZS</code></p>
+        <textarea id="topInput" rows="8" placeholder="Dilmurod | 12 buyurtma | 397 788 UZS"></textarea>
+        <button class="btn" onclick="saveTop()">Saqlash</button>
+      </div>
+    </div>
+
+    <!-- DEPOSITS -->
+    <div class="section" id="s-deposits">
+      <div class="card">
+        <h3><i class="fa-solid fa-wallet"></i> To'lov so'rovlari</h3>
+        <p style="font-size:12px;color:var(--sub);margin-bottom:10px;">Bot orqali ham tasdiqlash mumkin — bu yerda ham boshqarsa bo'ladi.</p>
+        <div id="depositsList"></div>
+      </div>
+    </div>
+
+    <!-- ORDERS -->
+    <div class="section" id="s-orders">
+      <div class="card">
+        <h3><i class="fa-solid fa-box"></i> Buyurtmalar</h3>
+        <div id="ordersAdminList"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  let TOKEN = localStorage.getItem('olovpay_admin_token') || '';
+
+  function showSection(s) {
+    document.querySelectorAll('.section').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+    document.getElementById('s-' + s).classList.add('active');
+    document.querySelector(`.tab[data-s="${s}"]`).classList.add('active');
+    if (s === 'games') loadGames();
+    if (s === 'deposits') loadDeposits();
+    if (s === 'orders') loadOrders();
+    if (s === 'banners') loadBanners();
+    if (s === 'top') fillTopInput();
+  }
+
+  async function adminApi(path, opts = {}) {
+    const res = await fetch(path, {
+      ...opts,
+      headers: { 'Content-Type': opts.body instanceof FormData ? undefined : 'application/json', 'x-admin-token': TOKEN, ...(opts.headers || {}) }
+    });
+    if (res.status === 401) { logout(); throw new Error('Ruxsat yo\'q'); }
+    return res.json();
+  }
+
+  async function doLogin() {
+    const pass = document.getElementById('loginPass').value;
+    const res = await fetch('/api/admin/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: pass }) });
+    const data = await res.json();
+    if (data.ok) {
+      TOKEN = data.token;
+      localStorage.setItem('olovpay_admin_token', TOKEN);
+      enterApp();
+    } else {
+      document.getElementById('loginErr').textContent = data.error || 'Xato';
+    }
+  }
+  function logout() {
+    localStorage.removeItem('olovpay_admin_token');
+    TOKEN = '';
+    document.getElementById('app').classList.add('hidden');
+    document.getElementById('loginBox').classList.remove('hidden');
+  }
+  function enterApp() {
+    document.getElementById('loginBox').classList.add('hidden');
+    document.getElementById('app').classList.remove('hidden');
+    loadConfig();
+  }
+  if (TOKEN) enterApp();
+
+  let CONFIG = null;
+  async function loadConfig() {
+    CONFIG = await (await fetch('/api/config')).json();
+    if (CONFIG.splashLogo) {
+      document.getElementById('splashPreview').src = CONFIG.splashLogo;
+      document.getElementById('splashPreview').style.display = 'block';
+    }
+    loadBanners();
+  }
+
+  /* ---------- SPLASH LOGO ---------- */
+  async function uploadSplash() {
+    const file = document.getElementById('splashFile').files[0];
+    if (!file) return alert('Rasm tanlang');
+    const fd = new FormData();
+    fd.append('logo', file);
+    const res = await adminApi('/api/admin/splash', { method: 'POST', body: fd });
+    if (res.ok) { alert('Logo saqlandi!'); loadConfig(); }
+  }
+
+  /* ---------- BANNERS ---------- */
+  function loadBanners() {
+    const wrap = document.getElementById('bannerSlots');
+    wrap.innerHTML = [0, 1, 2].map(i => {
+      const b = CONFIG.banners[i];
+      return `
+        <div class="banner-slot">
+          <div style="font-size:12px;font-weight:700;margin-bottom:8px;">Banner ${i + 1}</div>
+          ${b && b.image ? `<img src="${b.image}" style="display:block;">` : ''}
+          <input type="file" accept="image/*" id="bannerFile${i}">
+          <input type="text" id="bannerTitle${i}" placeholder="Sarlavha (masalan: Aksiya 20%)" value="${b ? (b.title || '') : ''}">
+          <input type="text" id="bannerSub${i}" placeholder="Qo'shimcha matn" value="${b ? (b.sub || '') : ''}">
+          <div class="row">
+            <button class="btn sm" onclick="saveBanner(${i})">Saqlash</button>
+            ${b ? `<button class="btn danger sm" onclick="deleteBanner(${i})">O'chirish</button>` : ''}
+          </div>
+        </div>`;
+    }).join('');
+  }
+  async function saveBanner(i) {
+    const file = document.getElementById(`bannerFile${i}`).files[0];
+    const fd = new FormData();
+    if (file) fd.append('image', file);
+    fd.append('title', document.getElementById(`bannerTitle${i}`).value);
+    fd.append('sub', document.getElementById(`bannerSub${i}`).value);
+    const res = await adminApi(`/api/admin/banners/${i}`, { method: 'POST', body: fd });
+    if (res.ok) { alert('Banner saqlandi!'); loadConfig(); }
+  }
+  async function deleteBanner(i) {
+    if (!confirm('O\'chirilsinmi?')) return;
+    await adminApi(`/api/admin/banners/${i}`, { method: 'DELETE' });
+    loadConfig();
+  }
+
+  /* ---------- GAMES ---------- */
+  async function addGame() {
+    const name = document.getElementById('newGameName').value.trim();
+    if (!name) return alert('Nom kiriting');
+    const fd = new FormData();
+    fd.append('name', name);
+    fd.append('rating', document.getElementById('newGameRating').value || '5 · 0');
+    const file = document.getElementById('newGameImage').files[0];
+    if (file) fd.append('image', file);
+    const res = await adminApi('/api/admin/games', { method: 'POST', body: fd });
+    if (res.ok) {
+      document.getElementById('newGameName').value = '';
+      document.getElementById('newGameRating').value = '';
+      document.getElementById('newGameImage').value = '';
+      await loadConfig();
+      loadGames();
+    }
+  }
+  function loadGames() {
+    const list = document.getElementById('gamesList');
+    if (!CONFIG.games.length) { list.innerHTML = '<div class="empty">Hali o\'yin yo\'q</div>'; return; }
+    list.innerHTML = CONFIG.games.map(g => `
+      <div class="game-item">
+        <div class="game-head">
+          <img src="${g.image || ''}">
+          <div style="flex:1;">
+            <div style="font-weight:700;">${g.name}</div>
+            <div style="font-size:11px;color:var(--sub);">${g.rating || ''}</div>
+          </div>
+          <button class="btn danger sm" onclick="deleteGame('${g.id}')">O'chirish</button>
+        </div>
+
+        <div style="font-size:12px;font-weight:700;margin:8px 0 4px;">UC paketlari <span class="tag">UC</span></div>
+        <div id="pkgs-uc-${g.id}">${renderPkgList(g, 'uc')}</div>
+        <div class="row" style="margin-top:6px;">
+          <input type="text" placeholder="Emoji" id="ic-uc-${g.id}" style="width:60px;margin-bottom:0;">
+          <input type="text" placeholder="Masalan: 60 UC" id="amt-uc-${g.id}" style="flex:1;margin-bottom:0;">
+          <input type="number" placeholder="Narx" id="price-uc-${g.id}" style="width:100px;margin-bottom:0;">
+          <button class="btn sm" onclick="addPkg('${g.id}','uc')">+</button>
+        </div>
+
+        <div style="font-size:12px;font-weight:700;margin:14px 0 4px;">Prime paketlari <span class="tag">Prime</span></div>
+        <div id="pkgs-prime-${g.id}">${renderPkgList(g, 'prime')}</div>
+        <div class="row" style="margin-top:6px;">
+          <input type="text" placeholder="Emoji" id="ic-prime-${g.id}" style="width:60px;margin-bottom:0;">
+          <input type="text" placeholder="Masalan: Prime 1 oy" id="amt-prime-${g.id}" style="flex:1;margin-bottom:0;">
+          <input type="number" placeholder="Narx" id="price-prime-${g.id}" style="width:100px;margin-bottom:0;">
+          <button class="btn sm" onclick="addPkg('${g.id}','prime')">+</button>
+        </div>
+      </div>
+    `).join('');
+  }
+  function renderPkgList(g, type) {
+    const pkgs = g.types[type] || [];
+    if (!pkgs.length) return '<div class="empty" style="padding:8px;">Hali paket yo\'q</div>';
+    return pkgs.map((p, i) => `
+      <div class="pkg-row">
+        <span>${p.icon} ${p.amt} — ${Number(p.price).toLocaleString('uz-UZ')} so'm</span>
+        <button class="btn danger sm" onclick="deletePkg('${g.id}','${type}',${i})">×</button>
+      </div>
+    `).join('');
+  }
+  async function addPkg(gameId, type) {
+    const icon = document.getElementById(`ic-${type}-${gameId}`).value || '🪙';
+    const amt = document.getElementById(`amt-${type}-${gameId}`).value;
+    const price = document.getElementById(`price-${type}-${gameId}`).value;
+    if (!amt || !price) return alert('Nom va narxni kiriting');
+    const res = await adminApi(`/api/admin/games/${gameId}/packages`, {
+      method: 'POST', body: JSON.stringify({ type, icon, amt, price })
+    });
+    if (res.ok) { await loadConfig(); loadGames(); }
+  }
+  async function deletePkg(gameId, type, index) {
+    await adminApi(`/api/admin/games/${gameId}/packages/${type}/${index}`, { method: 'DELETE' });
+    await loadConfig(); loadGames();
+  }
+  async function deleteGame(id) {
+    if (!confirm('O\'yin o\'chirilsinmi?')) return;
+    await adminApi(`/api/admin/games/${id}`, { method: 'DELETE' });
+    await loadConfig(); loadGames();
+  }
+
+  /* ---------- TOP ---------- */
+  function fillTopInput() {
+    document.getElementById('topInput').value = (CONFIG.topUsers || []).map(u => `${u.name} | ${u.sub || ''} | ${u.amt}`).join('\n');
+  }
+  async function saveTop() {
+    const lines = document.getElementById('topInput').value.split('\n').map(l => l.trim()).filter(Boolean);
+    const medals = ['🥇', '🥈', '🥉'];
+    const topUsers = lines.map((line, i) => {
+      const [name, sub, amt] = line.split('|').map(s => s.trim());
+      return { rank: i + 1, medal: medals[i] || null, name, sub, amt, initial: (name || '?')[0].toUpperCase() };
+    });
+    const res = await adminApi('/api/admin/top', { method: 'POST', body: JSON.stringify({ topUsers }) });
+    if (res.ok) { alert('Top ro\'yxati saqlandi!'); await loadConfig(); }
+  }
+
+  /* ---------- DEPOSITS ---------- */
+  async function loadDeposits() {
+    const res = await adminApi('/api/admin/deposits');
+    const list = document.getElementById('depositsList');
+    if (!res.deposits.length) { list.innerHTML = '<div class="empty">Hali to\'lov so\'rovi yo\'q</div>'; return; }
+    list.innerHTML = res.deposits.map(d => `
+      <div class="dep-row">
+        <div>
+          <div><b>${Number(d.amount).toLocaleString('uz-UZ')} so'm</b> — ${d.method.toUpperCase()}</div>
+          <div style="color:var(--sub);">${d.userId} · ${new Date(d.createdAt).toLocaleString('uz-UZ')}</div>
+          <div class="status-${d.status}">${d.status === 'pending' ? 'Kutilmoqda' : d.status === 'confirmed' ? 'Tasdiqlangan' : 'Bekor qilingan'}</div>
+        </div>
+        ${d.status === 'pending' ? `
+          <div class="row">
+            <button class="btn sm" onclick="confirmDep('${d.id}')">✅</button>
+            <button class="btn danger sm" onclick="rejectDep('${d.id}')">❌</button>
+          </div>` : ''}
+      </div>
+    `).join('');
+  }
+  async function confirmDep(id) { await adminApi(`/api/admin/deposits/${id}/confirm`, { method: 'POST' }); loadDeposits(); }
+  async function rejectDep(id) { await adminApi(`/api/admin/deposits/${id}/reject`, { method: 'POST' }); loadDeposits(); }
+
+  /* ---------- ORDERS ---------- */
+  async function loadOrders() {
+    const res = await adminApi('/api/admin/orders');
+    const list = document.getElementById('ordersAdminList');
+    if (!res.orders.length) { list.innerHTML = '<div class="empty">Hali buyurtma yo\'q</div>'; return; }
+    list.innerHTML = res.orders.map(o => `
+      <div class="dep-row">
+        <div>
+          <div><b>${o.packageLabel}</b> (${o.gameName})</div>
+          <div style="color:var(--sub);">${o.userId} · ID: ${o.playerId} · ${new Date(o.createdAt).toLocaleString('uz-UZ')}</div>
+          <div>${Number(o.price).toLocaleString('uz-UZ')} so'm</div>
+        </div>
+        <select onchange="setOrderStatus('${o.id}', this.value)">
+          <option value="processing" ${o.status === 'processing' ? 'selected' : ''}>Jarayonda</option>
+          <option value="done" ${o.status === 'done' ? 'selected' : ''}>Bajarildi</option>
+        </select>
+      </div>
+    `).join('');
+  }
+  async function setOrderStatus(id, status) {
+    await adminApi(`/api/admin/orders/${id}/status`, { method: 'POST', body: JSON.stringify({ status }) });
+  }
+
+  document.getElementById('loginPass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+</script>
+</body>
+</html>
