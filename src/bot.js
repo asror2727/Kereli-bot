@@ -86,6 +86,19 @@ function initBot() {
     bot.answerCallbackQuery(query.id, { text: action === 'confirm' ? 'Tasdiqlandi ✅' : 'Bekor qilindi ❌' }).catch(() => {});
     bot.editMessageReplyMarkup({ inline_keyboard: [] }, { chat_id: query.message.chat.id, message_id: query.message.message_id }).catch(() => {});
   });
+  // ---------- /admin — panelni to'g'ridan-to'g'ri botdan ochish ----------
+  bot.onText(/\/admin/, (msg) => {
+    const chatId = msg.chat.id;
+    if (String(chatId) !== String(ownerChatId)) {
+      bot.sendMessage(chatId, "Bu buyruq faqat admin uchun.");
+      return;
+    }
+    bot.sendMessage(chatId, '🔐 Admin panel:', {
+      reply_markup: {
+        inline_keyboard: [[{ text: '⚙️ Ochish', web_app: { url: `${webAppUrl}/admin.html` } }]]
+      }
+    });
+  });
 
   console.log('🤖 Telegram bot ishga tushdi (polling).');
   return bot;
