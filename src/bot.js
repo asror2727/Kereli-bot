@@ -3,11 +3,10 @@ const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
 const { readDb, updateDb, getUser } = require('./db');
+const hyperpin = require('./hyperpinClient');
 
 const uploadsDir = path.join(__dirname, '..', 'uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
-
-const EMOJIS = ['🪙', '💎', '🎁', '🔫', '⭐', '🔥'];
 
 // chatId -> { step, data }  — faqat admin bilan suhbat davomida vaqtinchalik saqlanadi
 const sessions = new Map();
@@ -35,7 +34,7 @@ function initBot() {
     return path.join(uploadsDir, path.basename(dbPath));
   }
 
-  async function downloadPhoto(fileId) {
+  async function downloadTelegramFile(fileId) {
     const link = await bot.getFileLink(fileId);
     const ext = path.extname(link.split('?')[0]) || '.jpg';
     const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`;
@@ -51,7 +50,7 @@ function initBot() {
   }
 
   // =========================================================
-  // /start — mijozlar uchun (o'zgarishsiz)
+  // /start — mijozlar uchun
   // =========================================================
   bot.onText(/\/start(?:\s+(.+))?/, async (msg, match) => {
     const chatId = msg.chat.id;
@@ -80,7 +79,7 @@ function initBot() {
         [{ text: '🆘 Support', url: `https://t.me/${support}` }]
       ]
     };
-    const caption = "OlovPay — o'yin UC, Gold, Almaz va boshqa xaridlar uchun eng tezkor xizmat 🔥\n\nTugmalardan birini tanlang:";
+    const caption = "FlayPay — o'yin UC, Gold, Almaz va boshqa xaridlar uchun eng tezkor xizmat 🔥\n\nTugmalardan birini tanlang:";
 
     try {
       const localLogo = toLocalPath(db.splashLogo);
@@ -107,21 +106,16 @@ function initBot() {
   });
 
   function sendMainMenu(chatId, editMessageId) {
-    const text = '🔥 *OlovPay — Admin panel*\n\nBo\'limni tanlang:';
+    const text = '🔥 *FlayPay — Admin panel*\n\nBo\'limni tanlang:';
     const keyboard = {
       inline_keyboard: [
         [{ text: '🖼 Bannerlar', callback_data: 'adm|menu|banners' }, { text: '🎮 O\'yinlar', callback_data: 'adm|menu|games' }],
         [{ text: '🏆 Top', callback_data: 'adm|menu|top' }, { text: '💰 To\'lovlar', callback_data: 'adm|menu|deposits' }],
-        [{ text: '📦 Buyurtmalar', callback_data: 'adm|menu|orders' }, { text: '🖼 Logo', callback_data: 'adm|menu|logo' }]
+        [{ text: '📦 Buyurtmalar', callback_data: 'adm|menu|orders' }, { text: '🖼 Logo', callback_data: 'adm|menu|logo' }],
+        [{ text: '🎵 Musiqa', callback_data: 'adm|menu|music' }, { text: '🔌 HyperPin aloqasi', callback_data: 'adm|menu|hyperpin' }]
       ]
     };
-    if (editMessageId) {
-      bot.editMessageText(text, { chat_id: chatId, message_id: editMessageId, parse_mode: 'Markdown', reply_markup: keyboard }).catch(() => {
-        bot.sendMessage(chatId, text, { parse_mode: 'Markdown', reply_markup: keyboard });
-      });
-    } else {
-      bot.sendMessage(chatId, text, { parse_mode: 'Markdown', reply_markup: keyboard });
-    }
+    editOrSend(chatId, editMessageId, text, keyboard.inline_keyboard);
   }
 
   // =========================================================
@@ -132,24 +126,22 @@ function initBot() {
     const msgId = query.message.message_id;
     const data = query.data || '';
 
-    // ---- eski to'lov tasdiqlash tugmalari (avtomatik xabar orqali kelgan) ----
     if (data.startsWith('dep_confirm_') || data.startsWith('dep_reject_')) {
       const action = data.startsWith('dep_confirm_') ? 'confirm' : 'reject';
       const depositId = data.slice(action === 'confirm' ? 'dep_confirm_'.length : 'dep_reject_'.length);
-      handleDepositAction(depositId, action, chatId, msgId, query.id);
+      handleDepositAction(depositId, action, chatId, msgId);
+      bot.answerCallbackQuery(query.id).catch(() => {});
       return;
     }
 
     if (!data.startsWith('adm|')) return bot.answerCallbackQuery(query.id).catch(() => {});
     if (!isOwner(chatId)) return bot.answerCallbackQuery(query.id, { text: 'Ruxsat yo\'q' }).catch(() => {});
 
-    const parts = data.split('|'); // ['adm', section, action, ...params]
+    const parts = data.split('|');
     bot.answerCallbackQuery(query.id).catch(() => {});
 
-    if (parts[1] === 'cancel') {
-      sessions.delete(String(chatId));
-      return sendMainMenu(chatId, msgId);
-    }
+    if (parts[1] === 'noop') return;
+    if (parts[1] === 'cancel') { sessions.delete(String(chatId)); return sendMainMenu(chatId, msgId); }
     if (parts[1] === 'menu') {
       sessions.delete(String(chatId));
       const section = parts[2];
@@ -160,6 +152,8 @@ function initBot() {
       if (section === 'deposits') return sendDepositsMenu(chatId, msgId);
       if (section === 'orders') return sendOrdersMenu(chatId, msgId);
       if (section === 'logo') return startLogoFlow(chatId, msgId);
+      if (section === 'music') return startMusicFlow(chatId, msgId);
+      if (section === 'hyperpin') return checkHyperpin(chatId, msgId);
     }
     if (parts[1] === 'banner') return handleBannerCallback(parts, chatId, msgId);
     if (parts[1] === 'game') return handleGameCallback(parts, chatId, msgId);
@@ -168,7 +162,7 @@ function initBot() {
     if (parts[1] === 'order') return handleOrderCallback(parts, chatId, msgId);
   });
 
-  function handleDepositAction(depositId, action, chatId, msgId, queryId) {
+  function handleDepositAction(depositId, action, chatId, msgId) {
     let notifyUserId = null, amount = 0, text = '';
     updateDb((db) => {
       const dep = db.deposits.find((d) => d.id === depositId);
@@ -185,11 +179,8 @@ function initBot() {
       }
     });
     if (notifyUserId) {
-      if (action === 'confirm') {
-        bot.sendMessage(notifyUserId, `✅ To'lovingiz tasdiqlandi! ${amount.toLocaleString('uz-UZ')} so'm balansingizga tushdi.`).catch(() => {});
-      } else {
-        bot.sendMessage(notifyUserId, `❌ To'lovingiz tasdiqlanmadi. Balki pul hali tushmagandir, birozdan keyin qayta urinib ko'ring yoki @${support} ga yozing.`).catch(() => {});
-      }
+      if (action === 'confirm') bot.sendMessage(notifyUserId, `✅ To'lovingiz tasdiqlandi! ${amount.toLocaleString('uz-UZ')} so'm balansingizga tushdi.`).catch(() => {});
+      else bot.sendMessage(notifyUserId, `❌ To'lovingiz tasdiqlanmadi. Balki pul hali tushmagandir, birozdan keyin qayta urinib ko'ring yoki @${support} ga yozing.`).catch(() => {});
     }
     if (text) bot.editMessageText(text, { chat_id: chatId, message_id: msgId }).catch(() => {});
     else bot.editMessageReplyMarkup({ inline_keyboard: [] }, { chat_id: chatId, message_id: msgId }).catch(() => {});
@@ -205,8 +196,7 @@ function initBot() {
       return [{ text: `${b ? '✅' : '⬜️'} Banner ${i + 1}`, callback_data: `adm|banner|view|${i}` }];
     });
     rows.push([{ text: '⬅️ Orqaga', callback_data: 'adm|menu|main' }]);
-    const text = '🖼 *Bannerlar* (3 ta slot)\n\nSlotni tanlang:';
-    editOrSend(chatId, msgId, text, rows);
+    editOrSend(chatId, msgId, '🖼 *Bannerlar* (3 ta slot)\n\nSlotni tanlang:', rows);
   }
   function handleBannerCallback(parts, chatId, msgId) {
     const action = parts[2];
@@ -274,20 +264,14 @@ function initBot() {
   }
 
   // =========================================================
-  // PAKETLAR (UC / Prime)
+  // PAKETLAR (UC / Prime) — ikonka: emoji YOKI rasm (PNG)
   // =========================================================
   function handlePkgCallback(parts, chatId, msgId) {
     const action = parts[2];
     if (action === 'add') {
       const gameId = parts[3], type = parts[4];
-      const rows = [EMOJIS.map((e, i) => ({ text: e, callback_data: `adm|pkg|emoji|${gameId}|${type}|${i}` }))];
-      rows.push([{ text: '⬅️ Orqaga', callback_data: `adm|game|view|${gameId}` }]);
-      editOrSend(chatId, msgId, `${type === 'uc' ? 'UC' : 'Prime'} paket uchun emoji tanlang:`, rows);
-    }
-    if (action === 'emoji') {
-      const gameId = parts[3], type = parts[4], emoji = EMOJIS[Number(parts[5])];
-      sessions.set(String(chatId), { step: 'pkg_text', data: { gameId, type, emoji } });
-      editOrSend(chatId, msgId, `✏️ Nomi va narxini shu formatda yozing:\n\n\`60 UC-12000\`\n\n(chapda nomi, o'ngda narxi, orasida "-")`, [cancelRow], true);
+      sessions.set(String(chatId), { step: 'pkg_icon', data: { gameId, type } });
+      editOrSend(chatId, msgId, `${type === 'uc' ? 'UC' : 'Prime'} paket uchun ikonka yuboring:\n\n— Emoji yozing (masalan 💎)\n— YOKI rasm (PNG/JPG) yuboring — shu rasm katta ikonka bo'ladi`, [cancelRow]);
     }
     if (action === 'list') {
       const gameId = parts[3];
@@ -297,7 +281,8 @@ function initBot() {
       const rows = [];
       ['uc', 'prime'].forEach((type) => {
         (game.types[type] || []).forEach((p, idx) => {
-          rows.push([{ text: `${p.icon} ${p.amt} — ${Number(p.price).toLocaleString('uz-UZ')} so'm`, callback_data: `adm|pkg|del|${gameId}|${type}|${idx}` }]);
+          const iconLabel = p.icon && p.icon.startsWith('/uploads/') ? '🖼' : p.icon;
+          rows.push([{ text: `${iconLabel} ${p.amt} — ${Number(p.price).toLocaleString('uz-UZ')} so'm`, callback_data: `adm|pkg|del|${gameId}|${type}|${idx}` }]);
         });
       });
       rows.push([{ text: '⬅️ Orqaga', callback_data: `adm|game|view|${gameId}` }]);
@@ -326,7 +311,7 @@ function initBot() {
   function handleTopCallback(parts, chatId, msgId) {
     if (parts[2] === 'edit') {
       sessions.set(String(chatId), { step: 'top_bulk', data: {} });
-      editOrSend(chatId, msgId, '✏️ Har bir qatorga bitta foydalanuvchi, shu formatda yozing:\n\n`Ism | 12 buyurtma | 397 788 UZS`\n\nBir nechta qatorni birdan yuborsangiz bo\'ladi.', [cancelRow], true);
+      editOrSend(chatId, msgId, '✏️ Har bir qatorga bitta foydalanuvchi, shu formatda yozing:\n\n`Ism | 12 buyurtma | 397 788 UZS`\n\nBir nechta qatorni birdan yuborsangiz bo\'ladi.', [cancelRow]);
     }
   }
 
@@ -340,7 +325,6 @@ function initBot() {
       editOrSend(chatId, msgId, '💰 *To\'lovlar*\n\nKutilayotgan to\'lov yo\'q.', [[{ text: '⬅️ Orqaga', callback_data: 'adm|menu|main' }]]);
       return;
     }
-    // Har birini alohida xabar qilib yuboramiz (tugmalar bilan), keyin menyuni qayta ko'rsatamiz
     bot.editMessageText(`💰 *To'lovlar* — ${pending.length} ta kutilmoqda:`, { chat_id: chatId, message_id: msgId, parse_mode: 'Markdown' }).catch(() => {});
     pending.forEach((dep) => {
       bot.sendMessage(chatId, `💰 ${Number(dep.amount).toLocaleString('uz-UZ')} so'm — ${dep.method.toUpperCase()}\nFoydalanuvchi: ${dep.userId}\nVaqt: ${new Date(dep.createdAt).toLocaleString('uz-UZ')}`, {
@@ -361,11 +345,12 @@ function initBot() {
       return;
     }
     const rows = orders.map((o) => {
-      const label = `${o.status === 'processing' ? '🟡' : '✅'} ${o.packageLabel} (${o.gameName}) — ${Number(o.price).toLocaleString('uz-UZ')}`;
+      const hp = o.hyperpinStatus ? (o.hyperpinStatus.startsWith('xato') ? ' ⚠️HP' : ' 🔌HP') : '';
+      const label = `${o.status === 'processing' ? '🟡' : '✅'} ${o.packageLabel} (${o.gameName}) — ${Number(o.price).toLocaleString('uz-UZ')}${hp}`;
       return o.status === 'processing' ? [{ text: label, callback_data: `adm|order|done|${o.id}` }] : [{ text: label, callback_data: 'adm|noop' }];
     });
     rows.push([{ text: '⬅️ Orqaga', callback_data: 'adm|menu|main' }]);
-    editOrSend(chatId, msgId, '📦 *Buyurtmalar* (bosilsa "Bajarildi" bo\'ladi):', rows);
+    editOrSend(chatId, msgId, '📦 *Buyurtmalar*\n(🔌HP = HyperPinga yuborildi, ⚠️HP = xato bo\'ldi, bosilsa "Bajarildi" bo\'ladi):', rows);
   }
   function handleOrderCallback(parts, chatId, msgId) {
     if (parts[2] === 'done') {
@@ -387,7 +372,30 @@ function initBot() {
   }
 
   // =========================================================
-  // MATN / RASM XABARLARI (session bosqichlarini davom ettirish)
+  // MUSIQA
+  // =========================================================
+  function startMusicFlow(chatId, msgId) {
+    sessions.set(String(chatId), { step: 'music_file', data: {} });
+    editOrSend(chatId, msgId, '🎵 Musiqa faylini (mp3, audio sifatida — "Fayl" emas, "Musiqa/Audio" bo\'lib) yuboring:', [cancelRow]);
+  }
+
+  // =========================================================
+  // HYPERPIN ALOQASINI TEKSHIRISH
+  // =========================================================
+  async function checkHyperpin(chatId, msgId) {
+    editOrSend(chatId, msgId, '🔌 Tekshirilmoqda...', []);
+    const result = await hyperpin.getMyBalance();
+    let text;
+    if (result.ok) {
+      text = `✅ *HyperPin bilan aloqa bor!*\n\nBalans: ${result.balance}`;
+    } else {
+      text = `⚠️ *HyperPin bilan aloqa yo'q yoki endpoint sozlanmagan.*\n\nXato: ${result.error}\n\nBu — hyperpinClient.js faylidagi endpoint yo'llari hali haqiqiy hujjatga moslanmagani uchun bo'lishi mumkin.`;
+    }
+    editOrSend(chatId, msgId, text, [[{ text: '⬅️ Orqaga', callback_data: 'adm|menu|main' }]]);
+  }
+
+  // =========================================================
+  // MATN / RASM / AUDIO XABARLARI (session bosqichlari)
   // =========================================================
   bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
@@ -400,8 +408,7 @@ function initBot() {
       switch (session.step) {
         case 'banner_photo': {
           if (!msg.photo) return bot.sendMessage(chatId, '📸 Iltimos, rasm yuboring.');
-          const fileId = msg.photo[msg.photo.length - 1].file_id;
-          const image = await downloadPhoto(fileId);
+          const image = await downloadTelegramFile(msg.photo[msg.photo.length - 1].file_id);
           session.data.image = image;
           session.step = 'banner_title';
           bot.sendMessage(chatId, '✏️ Endi sarlavha yozing (masalan: Aksiya 20%):');
@@ -430,13 +437,26 @@ function initBot() {
         }
         case 'game_photo': {
           if (!msg.photo) return bot.sendMessage(chatId, '📸 Iltimos, rasm yuboring.');
-          const fileId = msg.photo[msg.photo.length - 1].file_id;
-          const image = await downloadPhoto(fileId);
+          const image = await downloadTelegramFile(msg.photo[msg.photo.length - 1].file_id);
           const newGame = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name: session.data.name, rating: '5 · 0', image, types: { uc: [], prime: [] } };
           updateDb((db) => { db.games.push(newGame); });
           sessions.delete(String(chatId));
           bot.sendMessage(chatId, `✅ "${newGame.name}" qo'shildi!`);
           sendMainMenu(chatId);
+          break;
+        }
+        case 'pkg_icon': {
+          let icon;
+          if (msg.photo) {
+            icon = await downloadTelegramFile(msg.photo[msg.photo.length - 1].file_id);
+          } else if (msg.text) {
+            icon = msg.text.trim();
+          } else {
+            return bot.sendMessage(chatId, '❌ Emoji yozing yoki rasm yuboring.');
+          }
+          session.data.icon = icon;
+          session.step = 'pkg_text';
+          bot.sendMessage(chatId, '✏️ Endi nomi va narxini shu formatda yozing:\n\n60 UC-12000\n\n(chapda nomi, o\'ngda narxi, orasida "-")');
           break;
         }
         case 'pkg_text': {
@@ -446,13 +466,13 @@ function initBot() {
           const amt = text.slice(0, idx).trim();
           const price = parseInt(text.slice(idx + 1).trim().replace(/\s/g, ''), 10);
           if (!amt || isNaN(price)) { bot.sendMessage(chatId, '❌ Format noto\'g\'ri. Masalan: 60 UC-12000'); return; }
-          const { gameId, type, emoji } = session.data;
+          const { gameId, type, icon } = session.data;
           updateDb((db) => {
             const game = db.games.find((g) => g.id === gameId);
-            if (game) { if (!game.types[type]) game.types[type] = []; game.types[type].push({ icon: emoji, amt, price }); }
+            if (game) { if (!game.types[type]) game.types[type] = []; game.types[type].push({ icon, amt, price }); }
           });
           sessions.delete(String(chatId));
-          bot.sendMessage(chatId, `✅ Paket qo'shildi: ${emoji} ${amt} — ${price.toLocaleString('uz-UZ')} so'm`);
+          bot.sendMessage(chatId, `✅ Paket qo'shildi: ${amt} — ${price.toLocaleString('uz-UZ')} so'm`);
           sendMainMenu(chatId);
           break;
         }
@@ -471,11 +491,20 @@ function initBot() {
         }
         case 'logo_photo': {
           if (!msg.photo) return bot.sendMessage(chatId, '📸 Iltimos, rasm yuboring.');
-          const fileId = msg.photo[msg.photo.length - 1].file_id;
-          const image = await downloadPhoto(fileId);
+          const image = await downloadTelegramFile(msg.photo[msg.photo.length - 1].file_id);
           updateDb((db) => { db.splashLogo = image; });
           sessions.delete(String(chatId));
           bot.sendMessage(chatId, '✅ Logo yangilandi!');
+          sendMainMenu(chatId);
+          break;
+        }
+        case 'music_file': {
+          const fileObj = msg.audio || msg.voice || (msg.document && /audio|mpeg/.test(msg.document.mime_type || '') ? msg.document : null);
+          if (!fileObj) return bot.sendMessage(chatId, '🎵 Iltimos, audio/mp3 fayl yuboring.');
+          const url = await downloadTelegramFile(fileObj.file_id);
+          updateDb((db) => { db.musicUrl = url; });
+          sessions.delete(String(chatId));
+          bot.sendMessage(chatId, '✅ Musiqa yangilandi!');
           sendMainMenu(chatId);
           break;
         }
@@ -487,10 +516,8 @@ function initBot() {
     }
   });
 
-  // Yordamchi: matnni tahrirlash yoki (agar iloji bo'lmasa) yangi xabar yuborish
-  function editOrSend(chatId, msgId, text, rows, markdown = false) {
-    const opts = { chat_id: chatId, message_id: msgId, reply_markup: { inline_keyboard: rows } };
-    if (markdown) opts.parse_mode = 'Markdown'; else opts.parse_mode = 'Markdown';
+  function editOrSend(chatId, msgId, text, rows) {
+    const opts = { chat_id: chatId, message_id: msgId, parse_mode: 'Markdown', reply_markup: { inline_keyboard: rows } };
     if (msgId) {
       bot.editMessageText(text, opts).catch(() => {
         bot.sendMessage(chatId, text, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: rows } });
@@ -513,4 +540,14 @@ function notifyOwnerNewDeposit(bot, deposit) {
   }).catch((e) => console.error('Ownerga xabar yuborilmadi:', e.message));
 }
 
-module.exports = { initBot, notifyOwnerNewDeposit };
+function notifyOwnerNewOrder(bot, order, hpResult) {
+  const ownerChatId = process.env.OWNER_CHAT_ID;
+  if (!bot || !ownerChatId) return;
+  const hpLine = hpResult && hpResult.ok
+    ? `🔌 HyperPin'ga yuborildi (order: ${hpResult.orderId || '—'})`
+    : `⚠️ HyperPin'ga YUBORILMADI — xato: ${hpResult ? hpResult.error : 'noma\'lum'}\nBu buyurtmani qo'lda tekshiring!`;
+  const text = `📦 Yangi buyurtma\n\n${order.packageLabel} (${order.gameName})\nID: ${order.playerId}\nNarx: ${order.price.toLocaleString('uz-UZ')} so'm\nFoydalanuvchi: ${order.userId}\n\n${hpLine}`;
+  bot.sendMessage(ownerChatId, text).catch((e) => console.error('Ownerga buyurtma xabari yuborilmadi:', e.message));
+}
+
+module.exports = { initBot, notifyOwnerNewDeposit, notifyOwnerNewOrder };

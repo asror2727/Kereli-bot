@@ -9,6 +9,7 @@ const DB_PATH = path.join(__dirname, '..', 'data', 'db.json');
 
 const DEFAULT_DB = {
   splashLogo: null, // admin panelda yuklanadigan logo (data URL yoki /uploads/... yo'li)
+  musicUrl: null, // admin yuklagan musiqa fayli — bo'sh bo'lsa standart musiqa ishlatiladi
   banners: [null, null, null], // qat'iy 3 ta slot
   games: [],
   topUsers: [],
