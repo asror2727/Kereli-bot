@@ -7,7 +7,10 @@ const fs = require('fs');
 const { nanoid } = require('nanoid');
 const { readDb, updateDb, getUser } = require('./src/db');
 const hyperpin = require('./src/hyperpinClient');
-const { initBot, notifyOwnerNewDeposit } = require('./src/bot');
+const { initBot, notifyOwnerNewDeposit, notifyOwnerNewOrder } = require('./src/bot');
+
+const MIN_DEPOSIT = 1000;
+const MAX_DEPOSIT = 3000000;
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -54,6 +57,7 @@ app.get('/api/config', (req, res) => {
   const db = readDb();
   res.json({
     splashLogo: db.splashLogo,
+    musicUrl: db.musicUrl,
     banners: db.banners,
     games: db.games,
     topUsers: db.topUsers,
@@ -80,9 +84,11 @@ app.post('/api/check-id', async (req, res) => {
   const result = await hyperpin.checkPlayerId({ gameCode, playerId });
   if (result.ok) return res.json(result);
 
-  // HyperPin javob bermasa (masalan endpoint hali sozlanmagan) — demo fallback
+  // HyperPin javob bermasa (masalan endpoint hali sozlanmagan) — demo fallback.
+  // Muhim: soxta nik/ism ko'rsatmaymiz — faqat format to'g'ri ko'rinishini aytamiz,
+  // haqiqiy tasdiqni foydalanuvchining o'zi tekshirishi kerak.
   const found = /^\d{6,}$/.test(playerId.trim());
-  res.json({ ok: true, found, nickname: found ? `Player_${playerId.slice(-4)}` : null, fallback: true });
+  res.json({ ok: true, found, nickname: null, fallback: true });
 });
 
 // =========================================================
@@ -124,9 +130,14 @@ app.post('/api/orders', async (req, res) => {
     packageCode: pkg.amt,
     refId: orderId
   });
+  updateDb((d) => {
+    const o = d.orders.find((x) => x.id === orderId);
+    if (o) o.hyperpinStatus = hpResult.ok ? `yuborildi (${hpResult.orderId || 'ok'})` : `xato: ${hpResult.error}`;
+  });
   if (!hpResult.ok) {
-    console.warn(`HyperPin orderni qabul qilmadi (${orderId}):`, hpResult.error, '— buyurtma "processing" holatida qoladi, admin panelda qo\'lda tekshiring.');
+    console.warn(`HyperPin orderni qabul qilmadi (${orderId}):`, hpResult.error, '— buyurtma "processing" holatida qoladi, admin qo\'lda tekshirsin.');
   }
+  notifyOwnerNewOrder(bot, order, hpResult);
 
   res.json({ ok: true, order, balance: user.balance });
 });
@@ -143,6 +154,9 @@ app.get('/api/orders/:userId', (req, res) => {
 app.post('/api/deposits', (req, res) => {
   const { userId, amount, method } = req.body;
   if (!userId || !amount) return res.status(400).json({ ok: false, error: "Ma'lumot yetarli emas" });
+  const amt = Number(amount);
+  if (amt < MIN_DEPOSIT) return res.status(400).json({ ok: false, error: `Minimal to'ldirish miqdori: ${MIN_DEPOSIT.toLocaleString('uz-UZ')} so'm` });
+  if (amt > MAX_DEPOSIT) return res.status(400).json({ ok: false, error: `Maksimal to'ldirish miqdori: ${MAX_DEPOSIT.toLocaleString('uz-UZ')} so'm` });
 
   const deposit = {
     id: nanoid(10),
