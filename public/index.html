@@ -83,13 +83,13 @@
 
     .sec-title { font-size: 17px; font-weight: 800; margin: 18px 0 12px; display: flex; align-items: center; gap: 8px; }
     .sec-title i { color: var(--fire-orange); }
-    .games-grid { display: flex; flex-direction: column; gap: 12px; }
+    .games-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .game-item {
       position: relative;
-      border-radius: 16px;
+      border-radius: 18px;
       overflow: hidden;
       cursor: pointer;
-      height: 92px;
+      height: 130px;
       background: var(--card-bg);
       border: 1px solid rgba(255,255,255,0.06);
     }
@@ -97,17 +97,11 @@
     .game-item::after {
       content: '';
       position: absolute; inset: 0;
-      background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.15) 55%, transparent 100%);
+      background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.1) 55%, transparent 100%);
     }
     .game-item .game-item-title {
-      position: absolute; left: 14px; bottom: 10px; z-index: 2;
-      font-weight: 800; font-size: 16px; text-shadow: 0 2px 6px rgba(0,0,0,0.6);
-    }
-    .game-item .game-item-arrow {
-      position: absolute; right: 12px; bottom: 12px; z-index: 2;
-      width: 26px; height: 26px; border-radius: 50%;
-      background: rgba(255,69,0,0.85);
-      display: flex; align-items: center; justify-content: center; font-size: 12px;
+      position: absolute; left: 12px; bottom: 10px; z-index: 2;
+      font-weight: 800; font-size: 14px; text-shadow: 0 2px 6px rgba(0,0,0,0.6);
     }
 
     .reviews-box { background: var(--card-bg); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 16px; padding: 14px; margin-top: 10px; min-height: 60px; }
@@ -520,8 +514,7 @@
         const slide = document.createElement('div');
         slide.className = 'banner-slide' + (i === 0 ? ' active' : '');
         if (b && b.image) {
-          slide.style.backgroundImage = `linear-gradient(to top, rgba(0,0,0,0.8), transparent), url('${b.image}')`;
-          slide.innerHTML = `<div class="banner-text"><h4 style="font-size:14px;font-weight:800;">${b.title || ''}</h4><p style="font-size:11px;color:#ccc;">${b.sub || ''}</p></div>`;
+          slide.style.backgroundImage = `url('${b.image}')`;
         } else {
           slide.classList.add('empty');
           slide.innerHTML = `<div class="banner-empty-hint"><i class="fa-solid fa-image"></i>Banner ${i + 1} — admin paneldan qo'shiladi</div>`;
@@ -555,7 +548,6 @@
         <div class="game-item" onclick="openGame('${game.id}')">
           <img src="${game.image || ''}" alt="${game.name}" onerror="this.style.opacity=0">
           <div class="game-item-title">${game.name}</div>
-          <div class="game-item-arrow"><i class="fa-solid fa-chevron-right"></i></div>
         </div>
       `).join('');
     }
