@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>OlovPay</title>
+  <title>FlayPay</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
@@ -83,9 +83,32 @@
 
     .sec-title { font-size: 17px; font-weight: 800; margin: 18px 0 12px; display: flex; align-items: center; gap: 8px; }
     .sec-title i { color: var(--fire-orange); }
-    .games-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    .game-item { background: var(--card-bg); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 16px; padding: 10px; text-align: center; cursor: pointer; }
-    .game-item img { width: 100%; height: 100px; border-radius: 12px; object-fit: cover; margin-bottom: 8px; background:#000; }
+    .games-grid { display: flex; flex-direction: column; gap: 12px; }
+    .game-item {
+      position: relative;
+      border-radius: 16px;
+      overflow: hidden;
+      cursor: pointer;
+      height: 92px;
+      background: var(--card-bg);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    .game-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .game-item::after {
+      content: '';
+      position: absolute; inset: 0;
+      background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.15) 55%, transparent 100%);
+    }
+    .game-item .game-item-title {
+      position: absolute; left: 14px; bottom: 10px; z-index: 2;
+      font-weight: 800; font-size: 16px; text-shadow: 0 2px 6px rgba(0,0,0,0.6);
+    }
+    .game-item .game-item-arrow {
+      position: absolute; right: 12px; bottom: 12px; z-index: 2;
+      width: 26px; height: 26px; border-radius: 50%;
+      background: rgba(255,69,0,0.85);
+      display: flex; align-items: center; justify-content: center; font-size: 12px;
+    }
 
     .reviews-box { background: var(--card-bg); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 16px; padding: 14px; margin-top: 10px; min-height: 60px; }
     .review-slide { display: none; animation: fadeIn 0.4s ease; }
@@ -149,6 +172,7 @@
     .pkg-card { background: var(--card-bg); border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; padding: 14px 10px; text-align: center; cursor: pointer; position: relative; }
     .pkg-card.sel { border-color: var(--fire-orange); background: rgba(255,69,0,0.08); }
     .pkg-card .pkg-icon { font-size: 22px; margin-bottom: 6px; }
+    .pkg-card .pkg-icon img { width: 34px; height: 34px; object-fit: contain; margin: 0 auto; display: block; }
     .pkg-card .pkg-amt { font-weight: 800; font-size: 15px; }
     .pkg-card .pkg-price { font-size: 12px; color: var(--text-sub); margin-top: 3px; }
     .pkg-card.sel .pkg-price { color: var(--fire-yellow); }
@@ -183,18 +207,18 @@
   <div id="splash">
     <img id="splashLogo" style="display:none;">
     <div id="splashLogoFallback"><i class="fa-solid fa-fire-flame-curved"></i></div>
-    <div class="splash-title">OlovPay</div>
+    <div class="splash-title">FlayPay</div>
     <div class="splash-bar-track"><div class="splash-bar-fill"></div></div>
     <div class="splash-hint">Yuklanmoqda...</div>
   </div>
 
   <div class="bg-glow"></div>
   <audio id="bgMusic" loop preload="none">
-    <source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" type="audio/mpeg">
+    <source id="bgMusicSource" src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" type="audio/mpeg">
   </audio>
 
   <div class="header">
-    <div class="logo"><i class="fa-solid fa-fire-flame-curved"></i> OlovPay</div>
+    <div class="logo"><i class="fa-solid fa-fire-flame-curved"></i> FlayPay</div>
     <div class="music-toggle" id="musicToggle" onclick="toggleMusic()">
       <i class="fa-solid fa-music"></i> <span id="musicLabel">Music OFF</span>
     </div>
@@ -357,6 +381,7 @@
     </div>
     <div class="gamebody">
       <div class="check-box">
+        <div style="font-size:11px; color:var(--fire-yellow); margin-bottom:8px; line-height:1.5;"><i class="fa-solid fa-triangle-exclamation"></i> ID/nikni diqqat bilan tekshiring va ishonch hosil qiling. Noto'g'ri ID kiritilsa, admin javobgar emas.</div>
         <div style="font-size:12px; color:var(--text-sub); margin-bottom:8px;">O'yin ID raqamingizni kiriting</div>
         <div class="check-row">
           <input type="text" class="check-input" id="playerIdInput" placeholder="Masalan: 51482284">
@@ -446,6 +471,10 @@
           document.getElementById('splashLogo').style.display = 'block';
           document.getElementById('splashLogoFallback').style.display = 'none';
         }
+        if (CONFIG.musicUrl) {
+          document.getElementById('bgMusicSource').src = CONFIG.musicUrl;
+          audioEl.load();
+        }
 
         renderBanners();
         renderGames();
@@ -525,7 +554,8 @@
       g.innerHTML = CONFIG.games.map(game => `
         <div class="game-item" onclick="openGame('${game.id}')">
           <img src="${game.image || ''}" alt="${game.name}" onerror="this.style.opacity=0">
-          <div style="font-weight:700; font-size:14px;">${game.name}</div>
+          <div class="game-item-title">${game.name}</div>
+          <div class="game-item-arrow"><i class="fa-solid fa-chevron-right"></i></div>
         </div>
       `).join('');
     }
@@ -626,6 +656,8 @@
     let payTimerInterval = null;
     function goStep2() {
       const amt = parseInt(document.getElementById('depAmount').value) || 0;
+      if (amt < 1000) { alert("Minimal to'ldirish miqdori: 1 000 so'm"); return; }
+      if (amt > 3000000) { alert("Maksimal to'ldirish miqdori: 3 000 000 so'm"); return; }
       state.payAmount = amt;
       document.getElementById('payAmtLabel').textContent = amt.toLocaleString('uz-UZ');
       switchPage('paystep');
@@ -713,14 +745,16 @@
       const pkgs = (game.types[state.currentType] || []);
       const grid = document.getElementById('pkgGrid');
       if (!pkgs.length) { grid.innerHTML = `<div style="grid-column:1/-1;" class="empty-hint"><i class="fa-solid fa-box"></i>Bu bo'lim uchun hali paket yo'q</div>`; return; }
-      grid.innerHTML = pkgs.map((p, i) => `
+      grid.innerHTML = pkgs.map((p, i) => {
+        const iconHtml = p.icon && p.icon.startsWith('/uploads/') ? `<img src="${p.icon}">` : (p.icon || '🪙');
+        return `
         <div class="pkg-card" data-i="${i}" onclick="selectPkg(${i})">
           <div class="pkg-check"><i class="fa-solid fa-check"></i></div>
-          <div class="pkg-icon">${p.icon}</div>
+          <div class="pkg-icon">${iconHtml}</div>
           <div class="pkg-amt">${p.amt}</div>
           <div class="pkg-price">${Number(p.price).toLocaleString('uz-UZ')} so'm</div>
-        </div>
-      `).join('');
+        </div>`;
+      }).join('');
     }
     function selectPkg(i) {
       state.selectedPkgIdx = i;
