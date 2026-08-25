@@ -7,6 +7,22 @@ app.use(express.json());
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const SMS_SECRET_KEY = process.env.SMS_SECRET || "SeningMaxfiyKaliting123!"; 
 
+// SMS Forwarder yuboradigan POST so'rovini qabul qilish route'i
+app.post('/api/sms-receiver', async (req, res) => {
+  try {
+    const { message, secret } = req.body;
+    console.log("[SMS ARRIVED]:", message);
+
+    // Mantiq va avto-to'ldirish kodingiz shu yerda bo'ladi...
+
+    return res.status(200).json({ success: true, message: "OK" });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false });
+  }
+});
+
+
 // Webhook endpoint (SMS qabul qilish uchun)
 app.post('/api/sms-receiver', async (req, res) => {
   try {
