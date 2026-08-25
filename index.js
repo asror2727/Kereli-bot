@@ -1,49 +1,35 @@
-const express = require('express');
-const { Telegraf } = require('telegraf');
-
-const app = express();
-app.use(express.json());
-
-const bot = new Telegraf(process.env.BOT_TOKEN);
-const SMS_SECRET_KEY = process.env.SMS_SECRET || "SeningMaxfiyKaliting123!"; 
-
-// Telefondagi SMS Forwarder ilovasi uchun yagona POST route
 app.post('/api/sms-receiver', async (req, res) => {
   try {
     const { message, secret } = req.body;
 
-    console.log("[SMS ARRIVED]:", message);
+    console.log("[SMS KELDI]:", message);
 
-    // 1. Secret key tekshiruvi (Begonalar soxta so'rov yubormasligi uchun)
     if (secret !== SMS_SECRET_KEY) {
-      return res.status(403).json({ success: false, error: 'Unauthorized' });
+      return res.status(403).json({ success: false });
     }
 
-    // 2. Uzcard/Humo SMS xabaridan summani ajratib olish (Regex)
-    // Masalan: "8600****1234 kartangizga 15600.00 UZS tushdi"
-    const amountMatch = message ? message.match(/(\d[\d\s\.]*)\s*UZS/i) : null;
+    if (!message) return res.status(400).json({ success: false });
+
+    // 1. Bank SMS'idan summani ajratib olish (Masalan: 1 000.00 UZS, 15000 UZS, +50000 сум)
+    const amountMatch = message.match(/(?:karta|to'lov|tushdi|baza|summa|balans)[\s\S]*?([\d\s\.]+)\s*(?:UZS|so'm|sum)/i) || 
+                        message.match(/([\d\s\.]+)\s*UZS/i);
 
     if (amountMatch) {
-      // Probel va nuqtalarni tozalash (15 600.00 -> 15600)
-      const cleanAmountStr = amountMatch[1].replace(/\s/g, '').split('.')[0];
-      const receivedAmount = parseInt(cleanAmountStr, 10);
+      // Summani toza raqamga o'tkazish (1 000.00 -> 1000)
+      const rawAmount = amountMatch[1].replace(/\s+/g, '').split('.')[0];
+      const receivedAmount = parseInt(rawAmount, 10);
 
-      console.log(`[SMS KELDI] Tushgan summa: ${receivedAmount} so'm`);
-      
-      // SHU YERGA MongoDB / Bazangizdan to'lovni tekshirib balans to'ldirish kodi tushadi
+      console.log(`[AVTO TUSHUNDI] Summa: ${receivedAmount} so'm`);
+
+      // 2. Bazadan kutilayotgan to'lovni avtomatik tasdiqlash kodi:
+      // await autoApprovePayment(receivedAmount); 
+    } else {
+      console.log("[XATO] Summani aniqlab bo'lmadi");
     }
 
-    // Telefonga muvaffaqiyatli javob qaytarish
-    return res.status(200).json({ success: true, message: "OK" });
-
+    return res.status(200).json({ success: true });
   } catch (err) {
-    console.error('SMS processing error:', err);
+    console.error('SMS Error:', err);
     return res.status(500).json({ success: false });
   }
-});
-
-// Render uchun Port eshituvchi
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server ${PORT}-portda ishlamoqda...`);
 });
