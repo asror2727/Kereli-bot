@@ -89,42 +89,74 @@ app.post('/api/check-id', async (req, res) => {
 // SMS WEBHOOK — P2P to'lovlar uchun (SMS orqali notifikatsiya)
 // =========================================================
 app.post('/api/sms-receiver', (req, res) => {
-  const { text, phone, amount, transactionId } = req.body;
-  console.log(`📱 SMS webhook: ${phone} → ${amount} so'm | TxID: ${transactionId}`);
+  // SMS Forwarder ilovasi turli fieldlar yuborishi mumkin
+  const body = req.body;
+  const text = body.text || body.message || body.sms || body.body || body.content || '';
+  const phone = body.phone || body.from || body.sender || body.number || '';
+  const transactionId = body.transactionId || body.id || Date.now().toString();
 
-  if (!text || !amount) return res.status(400).json({ ok: false, error: 'SMS ma\'lumoti yetarli emas' });
+  console.log('📱 SMS webhook keldi:', JSON.stringify(body));
 
-  // Raqamga mos foydalanuvchini topish va balans qo'shish
+  if (!text) return res.status(400).json({ ok: false, error: 'SMS matni bo\'sh' });
+
+  // Summani SMS matnidan avtomatik chiqarish
+  // Misol: "100 000 UZS o'tkazildi" yoki "summa: 50000"
+  let amount = Number(body.amount) || 0;
+  if (!amount) {
+    const matches = text.match(/[\d\s]+(?:\.\d+)?(?:\s*(?:so'm|sum|uzs|сум))/i);
+    if (matches) {
+      amount = parseInt(matches[0].replace(/\s/g, ''), 10);
+    } else {
+      // Oddiy raqam qidirish (4+ ta raqam)
+      const nums = text.match(/\b(\d[\d\s]{3,})\b/g);
+      if (nums) amount = parseInt(nums[nums.length - 1].replace(/\s/g, ''), 10);
+    }
+  }
+
+  console.log(`📱 SMS: phone=${phone}, amount=${amount}, text=${text}`);
+
+  if (!amount || amount < 100) {
+    // Summa topilmadi — adminga xabar beramiz, qo'lda ko'radi
+    const db = readDb();
+    if (bot && process.env.OWNER_CHAT_ID) {
+      bot.sendMessage(process.env.OWNER_CHAT_ID, `📱 SMS keldi, summa aniqlanmadi:\n\n📞 ${phone}\n📝 ${text}\n\nQo'lda tekshiring!`).catch(() => {});
+    }
+    return res.json({ ok: true, message: 'SMS qabul qilindi, summa aniqlanmadi — adminga xabar yuborildi' });
+  }
+
+  // Foydalanuvchini telefon orqali topish
   updateDb((db) => {
-    const normalizedPhone = String(phone || '').replace(/\D/g, '').slice(-12);
+    const normalizedPhone = String(phone).replace(/\D/g, '').slice(-9);
     let found = false;
 
     for (const [userId, user] of Object.entries(db.users)) {
-      if (String(userId).includes(normalizedPhone) || normalizedPhone.includes(String(userId).slice(-10))) {
-        user.balance += Number(amount);
+      const userPhone = String(userId).replace(/\D/g, '').slice(-9);
+      if (userPhone === normalizedPhone || String(userId).slice(-9) === normalizedPhone) {
+        user.balance += amount;
         found = true;
-        const newDeposit = {
-          id: transactionId || nanoid(10),
+        db.deposits.unshift({
+          id: transactionId,
           userId,
-          amount: Number(amount),
-          method: 'sms',
+          amount,
+          method: 'p2p_sms',
           status: 'confirmed',
           createdAt: new Date().toISOString()
-        };
-        db.deposits.unshift(newDeposit);
+        });
         if (bot) {
-          bot.sendMessage(userId, `✅ To'lov tasdiqlandi!\n\n💰 ${Number(amount).toLocaleString('uz-UZ')} so'm balansingizga tushdi.\n\nRaqam: ${phone}\nTxID: ${transactionId}`).catch(() => {});
+          bot.sendMessage(userId, `✅ To'lov tasdiqlandi!\n💰 ${amount.toLocaleString('uz-UZ')} so'm balansingizga tushdi.`).catch(() => {});
         }
         break;
       }
     }
 
-    if (!found) {
-      console.warn(`❌ SMS: Foydalanuvchi topilmadi (${phone})`);
+    if (!found && bot && process.env.OWNER_CHAT_ID) {
+      bot.sendMessage(process.env.OWNER_CHAT_ID,
+        `📱 SMS to'lov keldi, foydalanuvchi topilmadi:\n\n📞 ${phone}\n💰 ${amount.toLocaleString('uz-UZ')} so'm\n📝 ${text}`
+      ).catch(() => {});
     }
   });
 
-  res.json({ ok: true, message: 'SMS qabul qilindi' });
+  res.json({ ok: true, message: 'SMS qabul qilindi', amount });
 });
 
 // =========================================================
