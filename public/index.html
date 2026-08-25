@@ -163,14 +163,16 @@
     .check-result.bad { color: #ff4757; }
 
     .pkg-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
-    .pkg-card { background: var(--card-bg); border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; padding: 14px 10px; text-align: center; cursor: pointer; position: relative; }
+    .pkg-card { background: var(--card-bg); border: 2px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 16px 12px; text-align: center; cursor: pointer; position: relative; transition: all 0.3s ease; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+    .pkg-card:hover { border-color: var(--fire-yellow); transform: translateY(-6px); background: rgba(255,165,0,0.08); box-shadow: 0 8px 20px rgba(255,69,0,0.2); }
+    .pkg-card.selected { border-color: var(--fire-orange); background: rgba(255,69,0,0.15); box-shadow: 0 0 20px rgba(255,69,0,0.3); }
     .pkg-card.sel { border-color: var(--fire-orange); background: rgba(255,69,0,0.08); }
-    .pkg-card .pkg-icon { font-size: 22px; margin-bottom: 6px; }
-    .pkg-card .pkg-icon img { width: 34px; height: 34px; object-fit: contain; margin: 0 auto; display: block; }
-    .pkg-card .pkg-amt { font-weight: 800; font-size: 15px; }
-    .pkg-card .pkg-price { font-size: 12px; color: var(--text-sub); margin-top: 3px; }
-    .pkg-card.sel .pkg-price { color: var(--fire-yellow); }
-    .pkg-check { position: absolute; top: 8px; right: 8px; width: 16px; height: 16px; border-radius: 50%; background: var(--fire-orange); color: #fff; font-size: 9px; display: none; align-items: center; justify-content: center; }
+    .pkg-card .pkg-icon { font-size: 28px; margin-bottom: 8px; }
+    .pkg-card .pkg-icon img { width: 40px; height: 40px; object-fit: contain; margin: 0 auto; display: block; }
+    .pkg-card .pkg-amt { font-weight: 800; font-size: 18px; color: #fff; margin-bottom: 4px; }
+    .pkg-card .pkg-price { font-size: 14px; color: var(--fire-yellow); font-weight: 700; margin-top: 4px; }
+    .pkg-card.sel .pkg-price { color: #ffa500; }
+    .pkg-check { position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; border-radius: 50%; background: linear-gradient(135deg, var(--fire-yellow), var(--fire-orange)); color: #000; font-size: 14px; font-weight: bold; display: none; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(255,69,0,0.4); }
     .pkg-card.sel .pkg-check { display: flex; }
     .buy-bar { position: sticky; bottom: 0; background: rgba(12,12,16,0.95); backdrop-filter: blur(15px); padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid rgba(255,255,255,0.06); margin: 16px -16px -16px; }
 
@@ -279,7 +281,7 @@
         <div>
           <div style="font-size:11px; color:var(--text-sub);">Karta raqami</div>
           <div style="font-size:18px; font-weight:800; letter-spacing:1px;" id="cardNumber">6262 9102 2412 0022</div>
-          <div style="font-size:11px; color:var(--fire-yellow);" id="cardHolderName">KARTA EGASINING ISMI</div>
+          <div style="font-size:11px; color:var(--fire-yellow);" id="cardHolderName">Q. Z</div>
         </div>
         <button class="btn-fire" style="padding:8px 12px; font-size:12px;" onclick="copyCard()"><i class="fa-solid fa-copy"></i> Nusxa</button>
       </div>
@@ -789,14 +791,27 @@
     }
 
     function showBuySuccessBanner(order) {
-      const existing = document.getElementById('buySuccessBanner');
-      if (existing) existing.remove();
-      const banner = document.createElement('div');
-      banner.id = 'buySuccessBanner';
-      banner.style.cssText = 'margin:14px 0; padding:14px; border-radius:14px; background:rgba(0,182,148,0.12); border:1px solid #00b894; font-size:13px; line-height:1.6;';
-      banner.innerHTML = `<b style="color:#00b894;">✅ Buyurtmangiz #${order.number} qabul qilindi!</b><br>Natija tez orada Telegram botga keladi.`;
-      document.querySelector('#p-game .gamebody').prepend(banner);
-      setTimeout(() => banner.remove(), 8000);
+      // Yangi oyna ochish
+      const modal = document.createElement('div');
+      modal.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.8); display:flex; align-items:center; justify-content:center; z-index:9999;';
+      modal.innerHTML = `
+        <div style="background:var(--card-bg); border:2px solid #00b894; border-radius:20px; padding:30px; max-width:400px; text-align:center; box-shadow:0 10px 40px rgba(0,0,0,0.5);">
+          <div style="font-size:60px; margin-bottom:15px;">✅</div>
+          <div style="font-size:22px; font-weight:800; color:#00b894; margin-bottom:15px;">Buyurtma qabul qilindi!</div>
+          <div style="font-size:14px; color:var(--text-sub); line-height:1.8; margin-bottom:20px;">
+            <b>#${order.number}</b> raqamli buyurtmangiz admin tomonidan qayta ko'rib chiqilinadi.<br><br>
+            <b>${order.gameName}</b><br>
+            ${order.packageLabel} — ${Number(order.price).toLocaleString('uz-UZ')} so'm
+          </div>
+          <div style="font-size:13px; color:#ffa500; margin-bottom:20px; padding:12px; background:rgba(255,165,0,0.1); border-radius:10px; border-left:3px solid #ffa500;">
+            Telegram botga tasdiqlash xabari keladi ⏱
+          </div>
+          <button onclick="this.parentElement.parentElement.remove(); switchPage('tarix');" style="width:100%; padding:14px; background:linear-gradient(90deg, var(--fire-yellow), var(--fire-orange)); color:#000; border:none; border-radius:10px; font-weight:800; cursor:pointer; font-size:16px;">
+            Buyurtmalar ro'yxatiga
+          </button>
+        </div>
+      `;
+      document.body.appendChild(modal);
     }
 
     function updateBalanceUI() {
