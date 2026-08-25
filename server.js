@@ -5,9 +5,8 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { nanoid } = require('nanoid');
-const { readDb, updateDb, getUser } = require('./src/db');
-const hyperpin = require('./src/hyperpinClient');
-const { initBot, notifyOwnerNewDeposit, notifyOwnerNewOrder } = require('./src/bot');
+const { readDb, updateDb, getUser, nextOrderNumber } = require('./src/db');
+const { initBot, getBotUsername } = require('./src/bot');
 
 const MIN_DEPOSIT = 1000;
 const MAX_DEPOSIT = 3000000;
@@ -75,27 +74,24 @@ app.get('/api/user/:id', (req, res) => {
 });
 
 // =========================================================
-// ID TEKSHIRISH (HyperPin orqali, xato bo'lsa oddiy fallback)
+// ID TEKSHIRISH — HyperPin bu funksiyani qo'llab-quvvatlamaydi,
+// shuning uchun faqat format tekshiruvi (fallback). Xaridor o'zi
+// diqqat bilan tekshirishi kerak (frontendda ogohlantirish bor).
 // =========================================================
 app.post('/api/check-id', async (req, res) => {
-  const { gameCode, playerId } = req.body;
+  const { playerId } = req.body;
   if (!playerId) return res.status(400).json({ ok: false, error: 'ID kiritilmagan' });
-
-  const result = await hyperpin.checkPlayerId({ gameCode, playerId });
-  if (result.ok) return res.json(result);
-
-  // HyperPin javob bermasa (masalan endpoint hali sozlanmagan) — demo fallback.
-  // Muhim: soxta nik/ism ko'rsatmaymiz — faqat format to'g'ri ko'rinishini aytamiz,
-  // haqiqiy tasdiqni foydalanuvchining o'zi tekshirishi kerak.
   const found = /^\d{6,}$/.test(playerId.trim());
   res.json({ ok: true, found, nickname: null, fallback: true });
 });
 
 // =========================================================
-// BUYURTMA (XARID)
+// BUYURTMA (XARID) — "pending" holatda yaratiladi, adminga
+// botdan to'liq ma'lumot bilan xabar boradi, admin tasdiqlaydi/
+// bekor qiladi (bekor qilinsa mablag' avtomatik qaytariladi).
 // =========================================================
 app.post('/api/orders', async (req, res) => {
-  const { userId, gameId, type, packageIndex, playerId } = req.body;
+  const { userId, userName, gameId, type, packageIndex, playerId } = req.body;
   const db = readDb();
   const game = db.games.find((g) => g.id === gameId);
   if (!game) return res.status(404).json({ ok: false, error: "O'yin topilmadi" });
@@ -110,34 +106,26 @@ app.post('/api/orders', async (req, res) => {
   const orderId = nanoid(10);
   user.balance -= pkg.price;
 
-  const order = {
-    id: orderId,
-    userId,
-    gameName: game.name,
-    packageLabel: pkg.amt,
-    price: pkg.price,
-    playerId,
-    status: 'processing',
-    createdAt: new Date().toISOString()
-  };
-  db.orders.unshift(order);
-  updateDb((d) => { d.orders = db.orders; d.users = db.users; });
-
-  // HyperPin'ga real buyurtma yuborish (adapter hozircha placeholder)
-  const hpResult = await hyperpin.createOrder({
-    gameCode: game.id,
-    playerId,
-    packageCode: pkg.amt,
-    refId: orderId
-  });
+  let order;
   updateDb((d) => {
-    const o = d.orders.find((x) => x.id === orderId);
-    if (o) o.hyperpinStatus = hpResult.ok ? `yuborildi (${hpResult.orderId || 'ok'})` : `xato: ${hpResult.error}`;
+    const number = nextOrderNumber(d);
+    order = {
+      id: orderId,
+      number,
+      userId,
+      userName: userName || null,
+      gameName: game.name,
+      packageLabel: pkg.amt,
+      price: pkg.price,
+      playerId,
+      status: 'pending',
+      createdAt: new Date().toISOString()
+    };
+    d.orders.unshift(order);
+    getUser(d, userId).balance = user.balance;
   });
-  if (!hpResult.ok) {
-    console.warn(`HyperPin orderni qabul qilmadi (${orderId}):`, hpResult.error, '— buyurtma "processing" holatida qoladi, admin qo\'lda tekshirsin.');
-  }
-  notifyOwnerNewOrder(bot, order, hpResult);
+
+  if (bot && bot._sendOrderNotification) bot._sendOrderNotification(order);
 
   res.json({ ok: true, order, balance: user.balance });
 });
@@ -149,7 +137,7 @@ app.get('/api/orders/:userId', (req, res) => {
 });
 
 // =========================================================
-// TO'LDIRISH (DEPOSIT) — karta orqali, admin/bot tasdiqlaydi
+// TO'LDIRISH (DEPOSIT) — karta orqali, admin(lar) tasdiqlaydi
 // =========================================================
 app.post('/api/deposits', (req, res) => {
   const { userId, amount, method } = req.body;
@@ -168,7 +156,7 @@ app.post('/api/deposits', (req, res) => {
   };
   updateDb((db) => { db.deposits.unshift(deposit); getUser(db, userId); });
 
-  notifyOwnerNewDeposit(bot, deposit);
+  if (bot && bot._sendDepositNotification) bot._sendDepositNotification(deposit);
   res.json({ ok: true, deposit });
 });
 
@@ -195,7 +183,9 @@ app.post('/api/reviews', (req, res) => {
 app.get('/api/referral/:userId', (req, res) => {
   const db = readDb();
   const user = getUser(db, req.params.userId);
-  res.json({ ok: true, refCode: user.refCode, refCount: user.refCount, refEarned: user.refEarned });
+  const botUsername = getBotUsername();
+  const refLink = botUsername ? `https://t.me/${botUsername}?start=${user.refCode}` : null;
+  res.json({ ok: true, refCode: user.refCode, refLink, refCount: user.refCount, refEarned: user.refEarned });
 });
 
 // =========================================================
