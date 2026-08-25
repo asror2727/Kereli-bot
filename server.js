@@ -86,6 +86,74 @@ app.post('/api/check-id', async (req, res) => {
 });
 
 // =========================================================
+// SMS WEBHOOK — P2P to'lovlar uchun (SMS orqali notifikatsiya)
+// =========================================================
+app.post('/api/sms-receiver', (req, res) => {
+  const { text, phone, amount, transactionId } = req.body;
+  console.log(`📱 SMS webhook: ${phone} → ${amount} so'm | TxID: ${transactionId}`);
+
+  if (!text || !amount) return res.status(400).json({ ok: false, error: 'SMS ma\'lumoti yetarli emas' });
+
+  // Raqamga mos foydalanuvchini topish va balans qo'shish
+  updateDb((db) => {
+    const normalizedPhone = String(phone || '').replace(/\D/g, '').slice(-12);
+    let found = false;
+
+    for (const [userId, user] of Object.entries(db.users)) {
+      if (String(userId).includes(normalizedPhone) || normalizedPhone.includes(String(userId).slice(-10))) {
+        user.balance += Number(amount);
+        found = true;
+        const newDeposit = {
+          id: transactionId || nanoid(10),
+          userId,
+          amount: Number(amount),
+          method: 'sms',
+          status: 'confirmed',
+          createdAt: new Date().toISOString()
+        };
+        db.deposits.unshift(newDeposit);
+        if (bot) {
+          bot.sendMessage(userId, `✅ To'lov tasdiqlandi!\n\n💰 ${Number(amount).toLocaleString('uz-UZ')} so'm balansingizga tushdi.\n\nRaqam: ${phone}\nTxID: ${transactionId}`).catch(() => {});
+        }
+        break;
+      }
+    }
+
+    if (!found) {
+      console.warn(`❌ SMS: Foydalanuvchi topilmadi (${phone})`);
+    }
+  });
+
+  res.json({ ok: true, message: 'SMS qabul qilindi' });
+});
+
+// =========================================================
+// P2P TO'LOV (CARD 2 CARD) — avtomatik hisob aniqlash
+// =========================================================
+app.post('/api/p2p-check', (req, res) => {
+  const { phone } = req.body;
+  if (!phone) return res.status(400).json({ ok: false, error: 'Telefon raqami kiritilmagan' });
+
+  const db = readDb();
+  const normalizedPhone = String(phone).replace(/\D/g, '').slice(-12);
+
+  // Telefon raqamiga mos hisob topish
+  let foundUser = null;
+  for (const [userId, user] of Object.entries(db.users)) {
+    if (String(userId).includes(normalizedPhone) || normalizedPhone.includes(String(userId).slice(-10))) {
+      foundUser = { userId, user };
+      break;
+    }
+  }
+
+  if (foundUser) {
+    res.json({ ok: true, found: true, userId: foundUser.userId, balance: foundUser.user.balance });
+  } else {
+    res.json({ ok: true, found: false, message: 'Foydalanuvchi topilmadi — SMS orqali yangi hisob yaratiladi' });
+  }
+});
+
+// =========================================================
 // BUYURTMA (XARID) — "pending" holatda yaratiladi, adminga
 // botdan to'liq ma'lumot bilan xabar boradi, admin tasdiqlaydi/
 // bekor qiladi (bekor qilinsa mablag' avtomatik qaytariladi).
