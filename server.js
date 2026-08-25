@@ -89,51 +89,56 @@ app.post('/api/check-id', async (req, res) => {
 // SMS WEBHOOK — P2P to'lovlar uchun (SMS orqali notifikatsiya)
 // =========================================================
 app.post('/api/sms-receiver', (req, res) => {
-  // SMS Forwarder ilovasi turli fieldlar yuborishi mumkin
-  const body = req.body;
-  const text = body.text || body.message || body.sms || body.body || body.content || '';
-  const phone = body.phone || body.from || body.sender || body.number || '';
-  const transactionId = body.transactionId || body.id || Date.now().toString();
+  const body = req.body || {};
+  
+  // SMS Forwarder ilovasining placeholder'larini to'g'ri qiymatga almashtirish
+  let text = body.text || body.message || body.sms || body.body || body.content || '';
+  text = text.replace(/%SMS_BODY%/g, text); // agar hali literal bo'lsa, o'ziga almashtir (ya'ni yo'q qil)
+  
+  const phone = (body.phone || body.from || body.sender || body.number || '').toString().replace(/\D/g, '').slice(-9);
+  const transactionId = body.transactionId || body.id || nanoid(10);
 
-  console.log('📱 SMS webhook keldi:', JSON.stringify(body));
-
-  if (!text) return res.status(400).json({ ok: false, error: 'SMS matni bo\'sh' });
+  console.log('📱 SMS webhook:', { text, phone, raw: body });
 
   // Summani SMS matnidan avtomatik chiqarish
-  // Misol: "100 000 UZS o'tkazildi" yoki "summa: 50000"
   let amount = Number(body.amount) || 0;
-  if (!amount) {
-    const matches = text.match(/[\d\s]+(?:\.\d+)?(?:\s*(?:so'm|sum|uzs|сум))/i);
-    if (matches) {
-      amount = parseInt(matches[0].replace(/\s/g, ''), 10);
-    } else {
-      // Oddiy raqam qidirish (4+ ta raqam)
-      const nums = text.match(/\b(\d[\d\s]{3,})\b/g);
-      if (nums) amount = parseInt(nums[nums.length - 1].replace(/\s/g, ''), 10);
+  if (!amount && text) {
+    // Turli formatni topish: "100 000", "50000", "1.5M" kabi
+    const patterns = [
+      /(\d+[\s\d]*)\s*(?:so'm|sum|uzs|сум)/i,  // "100 000 so'm"
+      /summa[:\s]*(\d+[\s\d]*)/i,                // "summa: 100000"
+      /(\d{4,})/,                                 // 4+ raqam
+    ];
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match) {
+        amount = parseInt(match[1].replace(/\s/g, ''), 10);
+        if (amount > 50 && amount < 500000000) break;
+      }
     }
   }
 
-  console.log(`📱 SMS: phone=${phone}, amount=${amount}, text=${text}`);
+  console.log(`📱 SMS parsed: phone=${phone}, amount=${amount}, text="${text}"`);
 
+  // Summa juda kichik yoki topilmasa — adminga xabar
   if (!amount || amount < 100) {
-    // Summa topilmadi — adminga xabar beramiz, qo'lda ko'radi
-    const db = readDb();
+    console.warn(`❌ SMS: summa yetarli emas (${amount})`);
     if (bot && process.env.OWNER_CHAT_ID) {
-      bot.sendMessage(process.env.OWNER_CHAT_ID, `📱 SMS keldi, summa aniqlanmadi:\n\n📞 ${phone}\n📝 ${text}\n\nQo'lda tekshiring!`).catch(() => {});
+      bot.sendMessage(process.env.OWNER_CHAT_ID,
+        `📱 SMS keldi, summa aniqlanmadi:\n\n📞 ${phone}\n📝 ${text}\n\nQo'lda tekshiring!`
+      ).catch(() => {});
     }
-    return res.json({ ok: true, message: 'SMS qabul qilindi, summa aniqlanmadi — adminga xabar yuborildi' });
+    return res.json({ ok: true, message: 'SMS qabul qilindi (summa aniqlanmadi)' });
   }
 
-  // Foydalanuvchini telefon orqali topish
+  // Foydalanuvchini topish va balans qo'shish
+  let foundUserId = null;
   updateDb((db) => {
-    const normalizedPhone = String(phone).replace(/\D/g, '').slice(-9);
-    let found = false;
-
     for (const [userId, user] of Object.entries(db.users)) {
-      const userPhone = String(userId).replace(/\D/g, '').slice(-9);
-      if (userPhone === normalizedPhone || String(userId).slice(-9) === normalizedPhone) {
+      const userPhoneDigits = String(userId).replace(/\D/g, '').slice(-9);
+      if (userPhoneDigits === phone) {
         user.balance += amount;
-        found = true;
+        foundUserId = userId;
         db.deposits.unshift({
           id: transactionId,
           userId,
@@ -142,21 +147,24 @@ app.post('/api/sms-receiver', (req, res) => {
           status: 'confirmed',
           createdAt: new Date().toISOString()
         });
-        if (bot) {
-          bot.sendMessage(userId, `✅ To'lov tasdiqlandi!\n💰 ${amount.toLocaleString('uz-UZ')} so'm balansingizga tushdi.`).catch(() => {});
-        }
         break;
       }
     }
-
-    if (!found && bot && process.env.OWNER_CHAT_ID) {
-      bot.sendMessage(process.env.OWNER_CHAT_ID,
-        `📱 SMS to'lov keldi, foydalanuvchi topilmadi:\n\n📞 ${phone}\n💰 ${amount.toLocaleString('uz-UZ')} so'm\n📝 ${text}`
-      ).catch(() => {});
-    }
   });
 
-  res.json({ ok: true, message: 'SMS qabul qilindi', amount });
+  if (foundUserId && bot) {
+    // Foydalanuvchiga xabar — to'lov tasdiqlandi
+    bot.sendMessage(foundUserId,
+      `✅ To'lov tasdiqlandi!\n\n💰 ${amount.toLocaleString('uz-UZ')} so'm balansingizga tushdi.\n\n📞 ${phone}\n🆔 ${transactionId}`
+    ).catch(() => {});
+  } else if (!foundUserId && bot && process.env.OWNER_CHAT_ID) {
+    // Foydalanuvchi topilmasa — adminga xabar
+    bot.sendMessage(process.env.OWNER_CHAT_ID,
+      `📱 SMS to'lov keldi, foydalanuvchi topilmadi:\n\n📞 ${phone}\n💰 ${amount.toLocaleString('uz-UZ')} so'm\n📝 ${text}\n\nQo'lda qo'shishingiz kerak bo'lishi mumkin.`
+    ).catch(() => {});
+  }
+
+  res.json({ ok: true, message: 'SMS qabul qilindi', amount, foundUserId });
 });
 
 // =========================================================
@@ -256,7 +264,20 @@ app.post('/api/deposits', (req, res) => {
   };
   updateDb((db) => { db.deposits.unshift(deposit); getUser(db, userId); });
 
-  if (bot && bot._sendDepositNotification) bot._sendDepositNotification(deposit);
+  // Adminga xabar — to'lov so'rovi keldi
+  const db = readDb();
+  const allAdminIds = String(process.env.OWNER_CHAT_ID ? [process.env.OWNER_CHAT_ID] : []).split(',').filter(Boolean);
+  if (bot && allAdminIds.length > 0) {
+    const text = `💰 Yangi to'lov so'rovi\n\nFoydalanuvchi: ${userId}\nSumma: ${amt.toLocaleString('uz-UZ')} so'm\nUsul: ${(method || 'UZCARD').toUpperCase()}\nVaqt: ${new Date(deposit.createdAt).toLocaleString('uz-UZ')}\n\n✅ Tasdiqlang yoki ❌ Bekor qiling:`;
+    allAdminIds.forEach((adminId) => {
+      if (adminId.trim()) {
+        bot.sendMessage(adminId.trim(), text, {
+          reply_markup: { inline_keyboard: [[{ text: '✅ Tasdiqlash', callback_data: `dep_confirm_${deposit.id}` }, { text: '❌ Bekor qilish', callback_data: `dep_reject_${deposit.id}` }]] }
+        }).catch((e) => console.error('Admin xabari yuborilmadi:', e.message));
+      }
+    });
+  }
+
   res.json({ ok: true, deposit });
 });
 
