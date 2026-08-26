@@ -86,85 +86,135 @@ app.post('/api/check-id', async (req, res) => {
 });
 
 // =========================================================
-// SMS WEBHOOK — P2P to'lovlar uchun (SMS orqali notifikatsiya)
+// SMS WEBHOOK — Avtomatik to'lov tasdiqlash
 // =========================================================
-app.post('/api/sms-receiver', (req, res) => {
-  const body = req.body || {};
-  
-  // SMS Forwarder ilovasining placeholder'larini to'g'ri qiymatga almashtirish
-  let text = body.text || body.message || body.sms || body.body || body.content || '';
-  text = text.replace(/%SMS_BODY%/g, text); // agar hali literal bo'lsa, o'ziga almashtir (ya'ni yo'q qil)
-  
-  const phone = (body.phone || body.from || body.sender || body.number || '').toString().replace(/\D/g, '').slice(-9);
-  const transactionId = body.transactionId || body.id || nanoid(10);
+const SMS_SECRET_KEY = process.env.SMS_SECRET_KEY || 'SeningMaxfiyKaliting123!';
 
-  console.log('📱 SMS webhook:', { text, phone, raw: body });
+app.post('/api/sms-receiver', async (req, res) => {
+  try {
+    const { message, secret } = req.body;
 
-  // Summani SMS matnidan avtomatik chiqarish
-  let amount = Number(body.amount) || 0;
-  if (!amount && text) {
-    // Turli formatni topish: "100 000", "50000", "1.5M" kabi
-    const patterns = [
-      /(\d+[\s\d]*)\s*(?:so'm|sum|uzs|сум)/i,  // "100 000 so'm"
-      /summa[:\s]*(\d+[\s\d]*)/i,                // "summa: 100000"
-      /(\d{4,})/,                                 // 4+ raqam
-    ];
-    for (const pattern of patterns) {
-      const match = text.match(pattern);
-      if (match) {
-        amount = parseInt(match[1].replace(/\s/g, ''), 10);
-        if (amount > 50 && amount < 500000000) break;
-      }
+    console.log('[SMS KELDI]:', message);
+
+    if (secret !== SMS_SECRET_KEY) {
+      console.warn('[SMS] Noto\'g\'ri secret');
+      return res.status(403).json({ success: false });
     }
-  }
 
-  console.log(`📱 SMS parsed: phone=${phone}, amount=${amount}, text="${text}"`);
+    if (!message) return res.status(400).json({ success: false });
 
-  // Summa juda kichik yoki topilmasa — adminga xabar
-  if (!amount || amount < 100) {
-    console.warn(`❌ SMS: summa yetarli emas (${amount})`);
-    if (bot && process.env.OWNER_CHAT_ID) {
-      bot.sendMessage(process.env.OWNER_CHAT_ID,
-        `📱 SMS keldi, summa aniqlanmadi:\n\n📞 ${phone}\n📝 ${text}\n\nQo'lda tekshiring!`
-      ).catch(() => {});
+    // Summani SMS matnidan chiqarish
+    // Masalan: "1 000.00 UZS", "15000 so'm", "+50000 сум", "karta: 100000 UZS"
+    const amountMatch = message.match(/(?:karta|to'lov|tushdi|baza|summa|balans)[\s\S]*?([\d\s\.]+)\s*(?:UZS|so'm|sum|сум)/i) || 
+                        message.match(/([\d\s\.]+)\s*(?:UZS|so'm|sum|сум)/i) ||
+                        message.match(/(\d{3,})/); // Oddiy 3+ raqam
+
+    if (!amountMatch) {
+      console.log('[SMS] Summani topib bo\'lmadi:', message);
+      return res.status(200).json({ success: true, message: 'SMS qabul, summa topilmadi' });
     }
-    return res.json({ ok: true, message: 'SMS qabul qilindi (summa aniqlanmadi)' });
-  }
 
-  // Foydalanuvchini topish va balans qo'shish
-  let foundUserId = null;
-  updateDb((db) => {
-    for (const [userId, user] of Object.entries(db.users)) {
-      const userPhoneDigits = String(userId).replace(/\D/g, '').slice(-9);
-      if (userPhoneDigits === phone) {
-        user.balance += amount;
-        foundUserId = userId;
-        db.deposits.unshift({
-          id: transactionId,
-          userId,
-          amount,
-          method: 'p2p_sms',
-          status: 'confirmed',
-          createdAt: new Date().toISOString()
-        });
+    const rawAmount = amountMatch[1].replace(/\s+/g, '').split('.')[0];
+    const amount = parseInt(rawAmount, 10);
+
+    if (amount < 100 || amount > 500000000) {
+      console.log(`[SMS] Summa chegarasi: ${amount}`);
+      return res.status(200).json({ success: true, message: 'SMS summa noto\'g\'ri' });
+    }
+
+    console.log(`[SMS PARSED] Summa: ${amount} so'm`);
+
+    // Telefon raqamini chiqarish (agar bor bo'lsa)
+    const phoneMatch = message.match(/(\+?\d{10,12})/);
+    const phone = phoneMatch ? phoneMatch[1].replace(/\D/g, '').slice(-9) : null;
+
+    // Kutilayotgan to'lovlardan shu summaga mos birorini topish
+    let foundDeposit = null;
+    const db = readDb();
+
+    for (const deposit of db.deposits) {
+      if (deposit.status === 'pending' && deposit.amount === amount) {
+        foundDeposit = deposit;
         break;
       }
     }
-  });
 
-  if (foundUserId && bot) {
-    // Foydalanuvchiga xabar — to'lov tasdiqlandi
-    bot.sendMessage(foundUserId,
-      `✅ To'lov tasdiqlandi!\n\n💰 ${amount.toLocaleString('uz-UZ')} so'm balansingizga tushdi.\n\n📞 ${phone}\n🆔 ${transactionId}`
-    ).catch(() => {});
-  } else if (!foundUserId && bot && process.env.OWNER_CHAT_ID) {
-    // Foydalanuvchi topilmasa — adminga xabar
-    bot.sendMessage(process.env.OWNER_CHAT_ID,
-      `📱 SMS to'lov keldi, foydalanuvchi topilmadi:\n\n📞 ${phone}\n💰 ${amount.toLocaleString('uz-UZ')} so'm\n📝 ${text}\n\nQo'lda qo'shishingiz kerak bo'lishi mumkin.`
-    ).catch(() => {});
+    if (foundDeposit) {
+      // **AVTOMATIK TASDIQLASH**
+      updateDb((d) => {
+        const dep = d.deposits.find((x) => x.id === foundDeposit.id);
+        if (dep && dep.status === 'pending') {
+          dep.status = 'confirmed';
+          getUser(d, foundDeposit.userId).balance += amount;
+
+          // Foydalanuvchiga xabar
+          if (bot) {
+            bot.sendMessage(
+              foundDeposit.userId,
+              `✅ To'lov AVTOMATIK tasdiqlandi!\n\n💰 ${amount.toLocaleString('uz-UZ')} so'm balansingizga tushdi.\n\n🕐 ${new Date().toLocaleString('uz-UZ')}`
+            ).catch(() => {});
+          }
+
+          console.log(`✅ [SMS AUTO] To'lov tasdiqlandi: ${foundDeposit.userId} -> ${amount} so'm`);
+        }
+      });
+
+      return res.status(200).json({ success: true, message: 'SMS tasdiqlandi, to\'lov avtomatik qabul qilindi' });
+    } else {
+      // Topilmasa — yangi deposit yaratish (foydalanuvchining telefoni bo'lsa)
+      if (phone) {
+        let foundUserId = null;
+        const tempDb = readDb();
+        for (const [userId, user] of Object.entries(tempDb.users)) {
+          const userPhone = String(userId).replace(/\D/g, '').slice(-9);
+          if (userPhone === phone) {
+            foundUserId = userId;
+            break;
+          }
+        }
+
+        if (foundUserId) {
+          // Avtomatik yangi deposit yaratish va tasdiqlash
+          updateDb((d) => {
+            getUser(d, foundUserId).balance += amount;
+            d.deposits.unshift({
+              id: nanoid(10),
+              userId: foundUserId,
+              amount,
+              method: 'p2p_sms_auto',
+              status: 'confirmed',
+              createdAt: new Date().toISOString()
+            });
+
+            if (bot) {
+              bot.sendMessage(
+                foundUserId,
+                `✅ SMS o'tkazma topildi va AVTOMATIK tasdiqlandi!\n\n💰 ${amount.toLocaleString('uz-UZ')} so'm balansingizga tushdi.`
+              ).catch(() => {});
+            }
+
+            console.log(`✅ [SMS NEW] Yangi deposit: ${foundUserId} -> ${amount} so'm`);
+          });
+
+          return res.status(200).json({ success: true, message: 'Yangi deposit yaratildi va tasdiqlandi' });
+        }
+      }
+
+      // Kutilayotgan topilmadi va telefon ham yo'q — adminga xabar
+      if (bot && process.env.OWNER_CHAT_ID) {
+        bot.sendMessage(
+          process.env.OWNER_CHAT_ID,
+          `📱 SMS keldi, avtomatik topib bo\'lmadi:\n\n💰 ${amount.toLocaleString('uz-UZ')} so'm\n📞 ${phone || 'raqam topilmadi'}\n📝 ${message.slice(0, 100)}\n\nQo'lda tekshiring!`
+        ).catch(() => {});
+      }
+
+      console.log(`⚠️ [SMS] Kutilayotgan top topilmadi: ${amount}`);
+      return res.status(200).json({ success: true, message: 'SMS qabul, adminga xabar yuborildi' });
+    }
+  } catch (err) {
+    console.error('[SMS ERROR]:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
   }
-
-  res.json({ ok: true, message: 'SMS qabul qilindi', amount, foundUserId });
 });
 
 // =========================================================
