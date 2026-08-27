@@ -92,7 +92,7 @@ app.post('/api/sms-receiver', async (req, res) => {
     }
 
     if (!message || message.includes('%SMS_BODY%') || message.includes('%body%')) {
-      console.log('[SMS TEST] Test xabari keldi, e'tibor berilmadi.');
+      console.log("[SMS TEST] Test xabari keldi, e'tibor berilmadi.");
       return res.status(200).json({ success: true, message: 'Test xabari qabul qilindi' });
     }
 
