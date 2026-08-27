@@ -30,9 +30,7 @@ const upload = multer({ storage, limits: { fileSize: 8 * 1024 * 1024 } });
 
 const bot = initBot();
 
-// =========================================================
-// ADMIN AUTH — oddiy parol tekshiruvi (kichik biznes uchun yetarli)
-// =========================================================
+// ADMIN AUTH
 function requireAdmin(req, res, next) {
   const token = req.headers['x-admin-token'];
   if (!token || token !== process.env.ADMIN_PASSWORD) {
@@ -49,9 +47,7 @@ app.post('/api/admin/login', (req, res) => {
   res.status(401).json({ ok: false, error: "Parol noto'g'ri" });
 });
 
-// =========================================================
-// PUBLIC CONFIG — mini app ochilganda shu yerdan hammasini oladi
-// =========================================================
+// PUBLIC CONFIG
 app.get('/api/config', (req, res) => {
   const db = readDb();
   res.json({
@@ -64,20 +60,14 @@ app.get('/api/config', (req, res) => {
   });
 });
 
-// =========================================================
 // USER / BALANCE
-// =========================================================
 app.get('/api/user/:id', (req, res) => {
   const db = readDb();
   const user = getUser(db, req.params.id);
   res.json({ ok: true, user });
 });
 
-// =========================================================
-// ID TEKSHIRISH — HyperPin bu funksiyani qo'llab-quvvatlamaydi,
-// shuning uchun faqat format tekshiruvi (fallback). Xaridor o'zi
-// diqqat bilan tekshirishi kerak (frontendda ogohlantirish bor).
-// =========================================================
+// ID TEKSHIRISH
 app.post('/api/check-id', async (req, res) => {
   const { playerId } = req.body;
   if (!playerId) return res.status(400).json({ ok: false, error: 'ID kiritilmagan' });
@@ -86,9 +76,9 @@ app.post('/api/check-id', async (req, res) => {
 });
 
 // =========================================================
-// SMS WEBHOOK — Avtomatik to'lov tasdiqlash
+// SMS WEBHOOK — Mukammallashtirilgan Avto-Tasdiqlash
 // =========================================================
-const SMS_SECRET_KEY = process.env.SMS_SECRET_KEY || 'SeningMaxfiyKaliting123!';
+const SMS_SECRET_KEY = process.env.SMS_SECRET || 'zohirbek0022';
 
 app.post('/api/sms-receiver', async (req, res) => {
   try {
@@ -97,137 +87,86 @@ app.post('/api/sms-receiver', async (req, res) => {
     console.log('[SMS KELDI]:', message);
 
     if (secret !== SMS_SECRET_KEY) {
-      console.warn('[SMS] Noto\'g\'ri secret');
-      return res.status(403).json({ success: false });
+      console.warn('[SMS] Noto\'g\'ri secret key');
+      return res.status(403).json({ success: false, error: 'Invalid secret' });
     }
 
-    if (!message) return res.status(400).json({ success: false });
+    if (!message || message.includes('%SMS_BODY%') || message.includes('%body%')) {
+      console.log('[SMS TEST] Test xabari keldi, e'tibor berilmadi.');
+      return res.status(200).json({ success: true, message: 'Test xabari qabul qilindi' });
+    }
 
-    // Summani SMS matnidan chiqarish
-    // Masalan: "1 000.00 UZS", "15000 so'm", "+50000 сум", "karta: 100000 UZS"
+    // Summani SMS matnidan ajratish Regex
     const amountMatch = message.match(/(?:karta|to'lov|tushdi|baza|summa|balans)[\s\S]*?([\d\s\.]+)\s*(?:UZS|so'm|sum|сум)/i) || 
                         message.match(/([\d\s\.]+)\s*(?:UZS|so'm|sum|сум)/i) ||
-                        message.match(/(\d{3,})/); // Oddiy 3+ raqam
+                        message.match(/(\d{3,})/);
 
     if (!amountMatch) {
-      console.log('[SMS] Summani topib bo\'lmadi:', message);
-      return res.status(200).json({ success: true, message: 'SMS qabul, summa topilmadi' });
+      console.log('[SMS] Summani aniqlab bo\'lmadi:', message);
+      return res.status(200).json({ success: true, message: 'Summa aniqlanmadi' });
     }
 
     const rawAmount = amountMatch[1].replace(/\s+/g, '').split('.')[0];
     const amount = parseInt(rawAmount, 10);
 
-    if (amount < 100 || amount > 500000000) {
-      console.log(`[SMS] Summa chegarasi: ${amount}`);
-      return res.status(200).json({ success: true, message: 'SMS summa noto\'g\'ri' });
+    if (isNaN(amount) || amount < 100) {
+      return res.status(200).json({ success: true, message: 'Noto\'g\'ri summa' });
     }
 
-    console.log(`[SMS PARSED] Summa: ${amount} so'm`);
+    console.log(`[SMS PARSED] Tushgan summa: ${amount} so'm`);
 
-    // Telefon raqamini chiqarish (agar bor bo'lsa)
-    const phoneMatch = message.match(/(\+?\d{10,12})/);
-    const phone = phoneMatch ? phoneMatch[1].replace(/\D/g, '').slice(-9) : null;
+    // Bazadan kutilayotgan to'lovlarni mosligini tekshirish
+    let confirmedDeposit = null;
 
-    // Kutilayotgan to'lovlardan shu summaga mos birorini topish
-    let foundDeposit = null;
-    const db = readDb();
-
-    for (const deposit of db.deposits) {
-      if (deposit.status === 'pending' && deposit.amount === amount) {
-        foundDeposit = deposit;
-        break;
+    updateDb((db) => {
+      // Eng oxirgi 'pending' holatdagi va summasi mos keladigan depozitni topish
+      const dep = db.deposits.find(d => d.status === 'pending' && Number(d.amount) === amount);
+      if (dep) {
+        dep.status = 'confirmed';
+        dep.confirmedAt = new Date().toISOString();
+        const user = getUser(db, dep.userId);
+        user.balance = Number(user.balance || 0) + amount;
+        confirmedDeposit = dep;
       }
-    }
+    });
 
-    if (foundDeposit) {
-      // **AVTOMATIK TASDIQLASH**
-      updateDb((d) => {
-        const dep = d.deposits.find((x) => x.id === foundDeposit.id);
-        if (dep && dep.status === 'pending') {
-          dep.status = 'confirmed';
-          getUser(d, foundDeposit.userId).balance += amount;
+    if (confirmedDeposit) {
+      console.log(`✅ [SMS AUTO] To'lov o'tdi: ${confirmedDeposit.userId} -> ${amount} so'm`);
 
-          // Foydalanuvchiga xabar
-          if (bot) {
-            bot.sendMessage(
-              foundDeposit.userId,
-              `✅ To'lov AVTOMATIK tasdiqlandi!\n\n💰 ${amount.toLocaleString('uz-UZ')} so'm balansingizga tushdi.\n\n🕐 ${new Date().toLocaleString('uz-UZ')}`
-            ).catch(() => {});
-          }
-
-          console.log(`✅ [SMS AUTO] To'lov tasdiqlandi: ${foundDeposit.userId} -> ${amount} so'm`);
-        }
-      });
-
-      return res.status(200).json({ success: true, message: 'SMS tasdiqlandi, to\'lov avtomatik qabul qilindi' });
+      if (bot) {
+        bot.sendMessage(
+          confirmedDeposit.userId,
+          `✅ **To'lov AVTOMATIK tasdiqlandi!**\n\n💰 **${amount.toLocaleString('uz-UZ')} so'm** balansingizga qo'shildi.\n🕐 Vaqt: ${new Date().toLocaleString('uz-UZ')}`,
+          { parse_mode: 'Markdown' }
+        ).catch(() => {});
+      }
+      return res.status(200).json({ success: true, message: 'To\'lov avto-tasdiqlandi' });
     } else {
-      // Topilmasa — yangi deposit yaratish (foydalanuvchining telefoni bo'lsa)
-      if (phone) {
-        let foundUserId = null;
-        const tempDb = readDb();
-        for (const [userId, user] of Object.entries(tempDb.users)) {
-          const userPhone = String(userId).replace(/\D/g, '').slice(-9);
-          if (userPhone === phone) {
-            foundUserId = userId;
-            break;
-          }
-        }
-
-        if (foundUserId) {
-          // Avtomatik yangi deposit yaratish va tasdiqlash
-          updateDb((d) => {
-            getUser(d, foundUserId).balance += amount;
-            d.deposits.unshift({
-              id: nanoid(10),
-              userId: foundUserId,
-              amount,
-              method: 'p2p_sms_auto',
-              status: 'confirmed',
-              createdAt: new Date().toISOString()
-            });
-
-            if (bot) {
-              bot.sendMessage(
-                foundUserId,
-                `✅ SMS o'tkazma topildi va AVTOMATIK tasdiqlandi!\n\n💰 ${amount.toLocaleString('uz-UZ')} so'm balansingizga tushdi.`
-              ).catch(() => {});
-            }
-
-            console.log(`✅ [SMS NEW] Yangi deposit: ${foundUserId} -> ${amount} so'm`);
-          });
-
-          return res.status(200).json({ success: true, message: 'Yangi deposit yaratildi va tasdiqlandi' });
-        }
-      }
-
-      // Kutilayotgan topilmadi va telefon ham yo'q — adminga xabar
+      // Agar kutilayotgan deposit topilmasa adminga xabar berish
       if (bot && process.env.OWNER_CHAT_ID) {
         bot.sendMessage(
           process.env.OWNER_CHAT_ID,
-          `📱 SMS keldi, avtomatik topib bo\'lmadi:\n\n💰 ${amount.toLocaleString('uz-UZ')} so'm\n📞 ${phone || 'raqam topilmadi'}\n📝 ${message.slice(0, 100)}\n\nQo'lda tekshiring!`
+          `📱 **Tizimga SMS tushdi, lekin kutilayotgan to'lov topilmadi:**\n\n💰 Summa: **${amount.toLocaleString('uz-UZ')} so'm**\n📝 Matn: \`${message.slice(0, 150)}\``,
+          { parse_mode: 'Markdown' }
         ).catch(() => {});
       }
-
-      console.log(`⚠️ [SMS] Kutilayotgan top topilmadi: ${amount}`);
-      return res.status(200).json({ success: true, message: 'SMS qabul, adminga xabar yuborildi' });
+      return res.status(200).json({ success: true, message: 'Kutilayotgan deposit topilmadi' });
     }
+
   } catch (err) {
-    console.error('[SMS ERROR]:', err.message);
+    console.error('[SMS ERROR]:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// =========================================================
-// P2P TO'LOV (CARD 2 CARD) — avtomatik hisob aniqlash
-// =========================================================
+// P2P TO'LOV TEKSHIRISH
 app.post('/api/p2p-check', (req, res) => {
   const { phone } = req.body;
-  if (!phone) return res.status(400).json({ ok: false, error: 'Telefon raqami kiritilmagan' });
+  if (!phone) return res.status(400).json({ ok: false, error: 'Telefon kiritilmagan' });
 
   const db = readDb();
   const normalizedPhone = String(phone).replace(/\D/g, '').slice(-12);
 
-  // Telefon raqamiga mos hisob topish
   let foundUser = null;
   for (const [userId, user] of Object.entries(db.users)) {
     if (String(userId).includes(normalizedPhone) || normalizedPhone.includes(String(userId).slice(-10))) {
@@ -239,15 +178,11 @@ app.post('/api/p2p-check', (req, res) => {
   if (foundUser) {
     res.json({ ok: true, found: true, userId: foundUser.userId, balance: foundUser.user.balance });
   } else {
-    res.json({ ok: true, found: false, message: 'Foydalanuvchi topilmadi — SMS orqali yangi hisob yaratiladi' });
+    res.json({ ok: true, found: false });
   }
 });
 
-// =========================================================
-// BUYURTMA (XARID) — "pending" holatda yaratiladi, adminga
-// botdan to'liq ma'lumot bilan xabar boradi, admin tasdiqlaydi/
-// bekor qiladi (bekor qilinsa mablag' avtomatik qaytariladi).
-// =========================================================
+// BUYURTMA YARATISH
 app.post('/api/orders', async (req, res) => {
   const { userId, userName, gameId, type, packageIndex, playerId } = req.body;
   const db = readDb();
@@ -294,9 +229,7 @@ app.get('/api/orders/:userId', (req, res) => {
   res.json({ ok: true, orders });
 });
 
-// =========================================================
-// TO'LDIRISH (DEPOSIT) — karta orqali, admin(lar) tasdiqlaydi
-// =========================================================
+// TO'LDIRISH (DEPOSIT)
 app.post('/api/deposits', (req, res) => {
   const { userId, amount, method } = req.body;
   if (!userId || !amount) return res.status(400).json({ ok: false, error: "Ma'lumot yetarli emas" });
@@ -306,27 +239,17 @@ app.post('/api/deposits', (req, res) => {
 
   const deposit = {
     id: nanoid(10),
-    userId,
-    amount: Number(amount),
+    userId: String(userId),
+    amount: amt,
     method: method || 'uzcard',
     status: 'pending',
     createdAt: new Date().toISOString()
   };
-  updateDb((db) => { db.deposits.unshift(deposit); getUser(db, userId); });
 
-  // Adminga xabar — to'lov so'rovi keldi
-  const db = readDb();
-  const allAdminIds = String(process.env.OWNER_CHAT_ID ? [process.env.OWNER_CHAT_ID] : []).split(',').filter(Boolean);
-  if (bot && allAdminIds.length > 0) {
-    const text = `💰 Yangi to'lov so'rovi\n\nFoydalanuvchi: ${userId}\nSumma: ${amt.toLocaleString('uz-UZ')} so'm\nUsul: ${(method || 'UZCARD').toUpperCase()}\nVaqt: ${new Date(deposit.createdAt).toLocaleString('uz-UZ')}\n\n✅ Tasdiqlang yoki ❌ Bekor qiling:`;
-    allAdminIds.forEach((adminId) => {
-      if (adminId.trim()) {
-        bot.sendMessage(adminId.trim(), text, {
-          reply_markup: { inline_keyboard: [[{ text: '✅ Tasdiqlash', callback_data: `dep_confirm_${deposit.id}` }, { text: '❌ Bekor qilish', callback_data: `dep_reject_${deposit.id}` }]] }
-        }).catch((e) => console.error('Admin xabari yuborilmadi:', e.message));
-      }
-    });
-  }
+  updateDb((db) => {
+    db.deposits.unshift(deposit);
+    getUser(db, userId);
+  });
 
   res.json({ ok: true, deposit });
 });
@@ -338,9 +261,7 @@ app.get('/api/deposits/:id', (req, res) => {
   res.json({ ok: true, deposit });
 });
 
-// =========================================================
-// FIKR (REVIEW)
-// =========================================================
+// REVIEWS
 app.post('/api/reviews', (req, res) => {
   const { name, stars, text } = req.body;
   const review = { name: name || 'Mehmon', stars: Math.min(5, Math.max(1, Number(stars) || 5)), text: text || '' };
@@ -348,9 +269,7 @@ app.post('/api/reviews', (req, res) => {
   res.json({ ok: true, review });
 });
 
-// =========================================================
-// REFERAL
-// =========================================================
+// REFERRAL
 app.get('/api/referral/:userId', (req, res) => {
   const db = readDb();
   const user = getUser(db, req.params.userId);
@@ -359,11 +278,7 @@ app.get('/api/referral/:userId', (req, res) => {
   res.json({ ok: true, refCode: user.refCode, refLink, refCount: user.refCount, refEarned: user.refEarned });
 });
 
-// =========================================================
-// ===================  A D M I N   P A N E L  ===============
-// =========================================================
-
-// ---- Splash logo ----
+// ADMIN PANEL ROUTES
 app.post('/api/admin/splash', requireAdmin, upload.single('logo'), (req, res) => {
   if (!req.file) return res.status(400).json({ ok: false, error: 'Fayl yo\'q' });
   const url = `/uploads/${req.file.filename}`;
@@ -371,7 +286,6 @@ app.post('/api/admin/splash', requireAdmin, upload.single('logo'), (req, res) =>
   res.json({ ok: true, url });
 });
 
-// ---- Banners (qat'iy 3 slot: 0,1,2) ----
 app.post('/api/admin/banners/:slot', requireAdmin, upload.single('image'), (req, res) => {
   const slot = Number(req.params.slot);
   if (![0, 1, 2].includes(slot)) return res.status(400).json({ ok: false, error: "Slot 0-2 oralig'ida bo'lishi kerak" });
@@ -389,7 +303,6 @@ app.delete('/api/admin/banners/:slot', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
-// ---- Games ----
 app.post('/api/admin/games', requireAdmin, upload.single('image'), (req, res) => {
   const { name, rating } = req.body;
   const image = req.file ? `/uploads/${req.file.filename}` : req.body.image;
@@ -415,9 +328,8 @@ app.delete('/api/admin/games/:id', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
-// ---- Game packages (UC / Prime paketlari) ----
 app.post('/api/admin/games/:id/packages', requireAdmin, (req, res) => {
-  const { type, icon, amt, price } = req.body; // type: 'uc' | 'prime'
+  const { type, icon, amt, price } = req.body;
   updateDb((db) => {
     const game = db.games.find((g) => g.id === req.params.id);
     if (!game) return;
@@ -436,14 +348,12 @@ app.delete('/api/admin/games/:id/packages/:type/:index', requireAdmin, (req, res
   res.json({ ok: true });
 });
 
-// ---- Top xaridorlar (admin qo'lda kiritadi yoki avto hisoblanadi) ----
 app.post('/api/admin/top', requireAdmin, (req, res) => {
-  const { topUsers } = req.body; // to'liq massiv almashtiriladi
+  const { topUsers } = req.body;
   updateDb((db) => { db.topUsers = topUsers; });
   res.json({ ok: true });
 });
 
-// ---- Deposits: ro'yxat + qo'lda tasdiqlash (bot orqali ham bo'ladi) ----
 app.get('/api/admin/deposits', requireAdmin, (req, res) => {
   const db = readDb();
   res.json({ ok: true, deposits: db.deposits });
@@ -468,7 +378,6 @@ app.post('/api/admin/deposits/:id/reject', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
-// ---- Orders (admin ko'rish uchun) ----
 app.get('/api/admin/orders', requireAdmin, (req, res) => {
   const db = readDb();
   res.json({ ok: true, orders: db.orders });
@@ -483,7 +392,6 @@ app.post('/api/admin/orders/:id/status', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
-// ---- Reviews (admin o'chira oladi) ----
 app.delete('/api/admin/reviews/:index', requireAdmin, (req, res) => {
   updateDb((db) => { db.reviews.splice(Number(req.params.index), 1); });
   res.json({ ok: true });
@@ -491,6 +399,4 @@ app.delete('/api/admin/reviews/:index', requireAdmin, (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`✅ FlayPay server ${PORT}-portda ishga tushdi`);
-  console.log(`   Sayt:  http://localhost:${PORT}`);
-  console.log(`   Admin: http://localhost:${PORT}/admin.html`);
 });
