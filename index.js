@@ -4,7 +4,7 @@ app.post('/api/sms-receiver', async (req, res) => {
 
     console.log("[SMS KELDI]:", message);
 
-    if (secret !== SMS_SECRET_KEY) {
+    if (secret !== zohirbek0022) {
       return res.status(403).json({ success: false });
     }
 
