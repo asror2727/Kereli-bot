@@ -261,7 +261,7 @@
       <div style="font-weight:700; font-size:13px; margin-bottom:10px;">TO'LDIRISH BOSQICHLARI</div>
       <div class="step-item"><div class="step-num">1</div> To'lov usuli va summani tanlang</div>
       <div class="step-item"><div class="step-num">2</div> Ko'rsatilgan kartaga AYNAN shu summani, 3 daqiqa ichida, BIR MARTA o'tkazing</div>
-      <div class="step-item"><div class="step-num">3</div> "To'lov qildim" tugmasini bosing — admin tekshirib tasdiqlaydi</div>
+      <div class="step-item"><div class="step-num">3</div> "To'lov qildim" tugmasini bosing — avtomatik yoki admin tekshirib tasdiqlaydi</div>
     </div>
     <button class="btn-fire" style="width:100%; margin-top:16px;" onclick="goStep2()">Davom etish</button>
   </div>
@@ -302,9 +302,9 @@
       <i class="fa-solid fa-clock" style="font-size:40px; color:var(--fire-yellow); margin-bottom:14px;"></i>
       <div style="font-weight:800; font-size:16px; margin-bottom:8px;">To'lovingiz tekshirilmoqda</div>
       <div style="font-size:13px; color:var(--text-sub); line-height:1.6;">
-        Admin to'lovni tasdiqlagach balansingiz avtomatik to'ldiriladi va Telegram botdan xabar keladi.<br><br>
+        Tizim yoki admin to'lovni tasdiqlagach balansingiz avtomatik to'ldiriladi va Telegram botdan xabar keladi.<br><br>
         Agar 10 daqiqadan ko'p vaqt o'tsa va pul tushmagan bo'lsa,<br>
-        <a href="#" id="supportLinkConfirm" style="color:var(--fire-orange); font-weight:700;">Support</a> ga yozing.
+        <a href="#" id="supportLinkConfirm" style="color:var(--fire-orange); font-weight:700;" onclick="openSupport()">Support</a> ga yozing.
       </div>
       <button class="btn-fire" style="margin-top:24px;" onclick="switchPage('asosiy')">Bosh sahifaga</button>
     </div>
@@ -433,7 +433,6 @@
     if (tg) { tg.ready(); tg.expand(); }
     const tgUser = tg && tg.initDataUnsafe && tg.initDataUnsafe.user ? tg.initDataUnsafe.user : null;
 
-    // Mini app to'g'ridan-to'g'ri brauzerda ochilsa (Telegram tashqarisida test uchun) — demo ID
     let USER_ID = tgUser ? String(tgUser.id) : localStorage.getItem('olovpay_demo_id');
     if (!USER_ID) {
       USER_ID = 'demo_' + Math.random().toString(36).slice(2, 10);
@@ -442,14 +441,20 @@
 
     let CONFIG = { splashLogo: null, banners: [null,null,null], games: [], topUsers: [], reviews: [] };
     let state = { balance: 0, currentGameId: null, currentType: 'uc', selectedPkgIdx: null, payAmount: 50000, currentDepositId: null };
+    let pollInterval = null;
 
     /* ---------- API HELPERS ---------- */
     async function api(path, opts = {}) {
-      const res = await fetch(path, {
-        headers: { 'Content-Type': 'application/json' },
-        ...opts
-      });
-      return res.json();
+      try {
+        const res = await fetch(path, {
+          headers: { 'Content-Type': 'application/json' },
+          ...opts
+        });
+        return await res.json();
+      } catch (e) {
+        console.error("API xato:", e);
+        return { ok: false };
+      }
     }
 
     /* ---------- INIT ---------- */
@@ -459,8 +464,8 @@
           api('/api/config'),
           api(`/api/user/${USER_ID}`)
         ]);
-        CONFIG = configRes;
-        state.balance = userRes.user.balance;
+        if (configRes) CONFIG = configRes;
+        if (userRes && userRes.user) state.balance = userRes.user.balance;
 
         if (CONFIG.splashLogo) {
           const logoImg = document.getElementById('splashLogo');
@@ -515,7 +520,7 @@
       c.innerHTML = '';
       const dots = document.createElement('div');
       dots.className = 'banner-dots';
-      CONFIG.banners.forEach((b, i) => {
+      (CONFIG.banners || [null,null,null]).forEach((b, i) => {
         const slide = document.createElement('div');
         slide.className = 'banner-slide' + (i === 0 ? ' active' : '');
         if (b && b.image) {
@@ -545,7 +550,7 @@
 
     function renderGames() {
       const g = document.getElementById('gamesGrid');
-      if (!CONFIG.games.length) {
+      if (!CONFIG.games || !CONFIG.games.length) {
         g.innerHTML = `<div class="empty-hint" style="grid-column:1/-1;"><i class="fa-solid fa-gamepad"></i>Hali o'yin qo'shilmagan</div>`;
         return;
       }
@@ -559,7 +564,7 @@
 
     function renderReviews() {
       const box = document.getElementById('reviewsBox');
-      if (!CONFIG.reviews.length) { box.innerHTML = `<div class="empty-hint"><i class="fa-solid fa-comment"></i>Hali fikr yo'q</div>`; return; }
+      if (!CONFIG.reviews || !CONFIG.reviews.length) { box.innerHTML = `<div class="empty-hint"><i class="fa-solid fa-comment"></i>Hali fikr yo'q</div>`; return; }
       box.innerHTML = CONFIG.reviews.map((r, i) => `
         <div class="review-slide${i === 0 ? ' active' : ''}">
           <div class="stars">${'<i class="fa-solid fa-star"></i>'.repeat(r.stars)}</div>
@@ -579,7 +584,7 @@
 
     function renderTop() {
       const list = document.getElementById('topList');
-      if (!CONFIG.topUsers.length) { list.innerHTML = `<div class="empty-hint"><i class="fa-solid fa-trophy"></i>Hali reyting yo'q</div>`; return; }
+      if (!CONFIG.topUsers || !CONFIG.topUsers.length) { list.innerHTML = `<div class="empty-hint"><i class="fa-solid fa-trophy"></i>Hali reyting yo'q</div>`; return; }
       list.innerHTML = CONFIG.topUsers.map(u => `
         <div class="top-row">
           <div class="top-rank${u.medal ? ' medal' : ''}">${u.medal || '#' + u.rank}</div>
@@ -613,15 +618,20 @@
 
     async function loadReferral() {
       const res = await api(`/api/referral/${USER_ID}`);
-      document.getElementById('refCode').textContent = res.refLink || res.refCode;
-      document.getElementById('refCode').dataset.value = res.refLink || res.refCode;
-      document.getElementById('refCount').textContent = res.refCount;
-      document.getElementById('refEarned').textContent = res.refEarned.toLocaleString('uz-UZ');
+      if (!res) return;
+      document.getElementById('refCode').textContent = res.refLink || res.refCode || '—';
+      document.getElementById('refCode').dataset.value = res.refLink || res.refCode || '';
+      document.getElementById('refCount').textContent = res.refCount || 0;
+      document.getElementById('refEarned').textContent = (res.refEarned || 0).toLocaleString('uz-UZ');
     }
 
     /* ---------- NAVIGATION ---------- */
     const navOrder = ['asosiy', 'toldirish', 'tarix', 'profil'];
     function switchPage(pageId) {
+      if (pageId !== 'payconfirm' && pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+      }
       document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
       document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
       const target = document.getElementById('p-' + pageId);
@@ -689,34 +699,52 @@
     }
     function copyCard() { navigator.clipboard.writeText('6262910224120022'); alert("Karta raqami nusxalandi!"); }
 
+    /* ===== AVTO/ADMIN TO'LOV TEKSHIRISH (POLLING) ===== */
     async function confirmPayment() {
       clearInterval(payTimerInterval);
       const res = await api('/api/deposits', {
         method: 'POST',
-        body: JSON.stringify({ userId: USER_ID, amount: state.payAmount, method: document.getElementById('payUzcard').classList.contains('active') ? 'uzcard' : 'humo' })
+        body: JSON.stringify({
+          userId: USER_ID,
+          amount: state.payAmount,
+          method: document.getElementById('payUzcard').classList.contains('active') ? 'uzcard' : 'humo'
+        })
       });
+      
       state.currentDepositId = res.deposit ? res.deposit.id : null;
       switchPage('payconfirm');
-      pollDeposit();
+      
+      // Har 3 sekundda serverdan holatni so'rab turish
+      pollDepositStatus();
     }
-    function pollDeposit() {
+
+    function pollDepositStatus() {
       if (!state.currentDepositId) return;
-      const interval = setInterval(async () => {
+      if (pollInterval) clearInterval(pollInterval);
+
+      pollInterval = setInterval(async () => {
         const res = await api(`/api/deposits/${state.currentDepositId}`);
-        if (!res.ok) return;
+        if (!res || !res.ok || !res.deposit) return;
+
         if (res.deposit.status === 'confirmed') {
-          clearInterval(interval);
+          clearInterval(pollInterval);
+          pollInterval = null;
+          
+          // Balansni yangilash
           const u = await api(`/api/user/${USER_ID}`);
-          state.balance = u.user.balance;
+          if (u && u.user) state.balance = u.user.balance;
           updateBalanceUI();
-          alert("To'lovingiz tasdiqlandi! Balans to'ldirildi.");
+
+          alert("✅ To'lovingiz tasdiqlandi! Balansga qo'shildi.");
           switchPage('asosiy');
         } else if (res.deposit.status === 'rejected') {
-          clearInterval(interval);
-          alert("To'lov tasdiqlanmadi. Support bilan bog'laning.");
+          clearInterval(pollInterval);
+          pollInterval = null;
+
+          alert("❌ To'lov bekor qilindi yoki topilmadi.");
           switchPage('toldirish');
         }
-      }, 4000);
+      }, 3000);
     }
 
     /* ---------- GAME DETAIL ---------- */
@@ -743,7 +771,7 @@
     }
     function renderPackages() {
       const game = CONFIG.games.find(g => g.id === state.currentGameId);
-      const pkgs = (game.types[state.currentType] || []);
+      const pkgs = (game && game.types && game.types[state.currentType]) ? game.types[state.currentType] : [];
       const grid = document.getElementById('pkgGrid');
       if (!pkgs.length) { grid.innerHTML = `<div style="grid-column:1/-1;" class="empty-hint"><i class="fa-solid fa-box"></i>Bu bo'lim uchun hali paket yo'q</div>`; return; }
       grid.innerHTML = pkgs.map((p, i) => {
@@ -767,7 +795,7 @@
       if (!val) { resultEl.className = 'check-result show bad'; resultEl.innerHTML = `<i class="fa-solid fa-circle-exclamation"></i> ID kiriting`; return; }
       resultEl.className = 'check-result show'; resultEl.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Tekshirilmoqda...`;
       const res = await api('/api/check-id', { method: 'POST', body: JSON.stringify({ gameCode: state.currentGameId, playerId: val }) });
-      if (res.found) {
+      if (res && res.found) {
         resultEl.className = 'check-result show ok';
         resultEl.innerHTML = `<i class="fa-solid fa-circle-check"></i> ID topildi${res.nickname ? ': ' + res.nickname : ''}`;
       } else {
@@ -784,14 +812,13 @@
         method: 'POST',
         body: JSON.stringify({ userId: USER_ID, userName, gameId: state.currentGameId, type: state.currentType, packageIndex: state.selectedPkgIdx, playerId: document.getElementById('playerIdInput').value.trim() })
       });
-      if (!res.ok) { alert(res.error || 'Xatolik yuz berdi'); if (res.error === 'Balans yetarli emas') switchPage('toldirish'); return; }
+      if (!res || !res.ok) { alert(res.error || 'Xatolik yuz berdi'); if (res && res.error === 'Balans yetarli emas') switchPage('toldirish'); return; }
       state.balance = res.balance;
       updateBalanceUI();
       showBuySuccessBanner(res.order);
     }
 
     function showBuySuccessBanner(order) {
-      // Yangi oyna ochish
       const modal = document.createElement('div');
       modal.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.8); display:flex; align-items:center; justify-content:center; z-index:9999;';
       modal.innerHTML = `
@@ -838,10 +865,12 @@
       if (!selectedStars) { alert("Yulduzlarni tanlang."); return; }
       const name = tgUser ? (tgUser.first_name || 'Siz') : 'Siz';
       const res = await api('/api/reviews', { method: 'POST', body: JSON.stringify({ name, stars: selectedStars, text: document.getElementById('reviewText').value }) });
-      CONFIG.reviews.unshift(res.review);
-      renderReviews();
-      closeModal('reviewModal');
-      alert("Fikringiz uchun rahmat!");
+      if (res && res.review) {
+        CONFIG.reviews.unshift(res.review);
+        renderReviews();
+        closeModal('reviewModal');
+        alert("Fikringiz uchun rahmat!");
+      }
     }
     function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 
