@@ -1,512 +1,286 @@
-require('dotenv').config();
 const express = require('express');
-const cors = require('cors');
-const multer = require('multer');
 const path = require('path');
-const fs = require('fs');
-const { nanoid } = require('nanoid');
-const { readDb, updateDb, getUser, nextOrderNumber } = require('./src/db');
-const { initBot, getBotUsername } = require('./src/bot');
-
-const MIN_DEPOSIT = 1000;
-const MAX_DEPOSIT = 3000000;
+const cors = require('cors');
+const storage = require('node-persist');
+const { Telegraf, Markup } = require('telegraf');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
-
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(__dirname));
 
-const uploadsDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
-app.use('/uploads', express.static(uploadsDir));
+const BOT_TOKEN = process.env.BOT_TOKEN || 'YOUR_BOT_TOKEN_HERE';
+const OWNER_ID = process.env.OWNER_ID || '7651404790';
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadsDir),
-  filename: (req, file, cb) => cb(null, `${Date.now()}-${nanoid(6)}${path.extname(file.originalname)}`)
-});
-const upload = multer({ storage, limits: { fileSize: 8 * 1024 * 1024 } });
+const bot = new Telegraf(BOT_TOKEN);
+const adminState = {};
 
-const bot = initBot();
+(async () => {
+  await storage.init({ dir: './.dbdata' });
 
-// =========================================================
-// ADMIN AUTH — oddiy parol tekshiruvi (kichik biznes uchun yetarli)
-// =========================================================
-function requireAdmin(req, res, next) {
-  const token = req.headers['x-admin-token'];
-  if (!token || token !== process.env.ADMIN_PASSWORD) {
-    return res.status(401).json({ ok: false, error: 'Ruxsat yo\'q' });
-  }
-  next();
-}
+  if (!(await storage.getItem('banners'))) await storage.setItem('banners', []);
+  if (!(await storage.getItem('games'))) await storage.setItem('games', []);
+  if (!(await storage.getItem('reviews'))) await storage.setItem('reviews', []);
+  if (!(await storage.getItem('orders'))) await storage.setItem('orders', []);
+  if (!(await storage.getItem('users'))) await storage.setItem('users', {});
+})();
 
-app.post('/api/admin/login', (req, res) => {
-  const { password } = req.body;
-  if (password === process.env.ADMIN_PASSWORD) {
-    return res.json({ ok: true, token: password });
-  }
-  res.status(401).json({ ok: false, error: "Parol noto'g'ri" });
-});
+// ================= TELEGRAM BOT LOGIC =================
 
-// =========================================================
-// PUBLIC CONFIG — mini app ochilganda shu yerdan hammasini oladi
-// =========================================================
-app.get('/api/config', (req, res) => {
-  const db = readDb();
-  res.json({
-    splashLogo: db.splashLogo,
-    musicUrl: db.musicUrl,
-    banners: db.banners,
-    games: db.games,
-    topUsers: db.topUsers,
-    reviews: db.reviews
-  });
-});
+bot.start(async (ctx) => {
+  const userId = ctx.from.id.toString();
+  const userName = ctx.from.first_name || 'Foydalanuvchi';
+  const username = ctx.from.username ? `@${ctx.from.username}` : '';
 
-// =========================================================
-// USER / BALANCE
-// =========================================================
-app.get('/api/user/:id', (req, res) => {
-  const db = readDb();
-  const user = getUser(db, req.params.id);
-  res.json({ ok: true, user });
-});
-
-// =========================================================
-// ID TEKSHIRISH — HyperPin bu funksiyani qo'llab-quvvatlamaydi,
-// shuning uchun faqat format tekshiruvi (fallback). Xaridor o'zi
-// diqqat bilan tekshirishi kerak (frontendda ogohlantirish bor).
-// =========================================================
-app.post('/api/check-id', async (req, res) => {
-  const { playerId } = req.body;
-  if (!playerId) return res.status(400).json({ ok: false, error: 'ID kiritilmagan' });
-  const found = /^\d{6,}$/.test(playerId.trim());
-  res.json({ ok: true, found, nickname: null, fallback: true });
-});
-
-// =========================================================
-// SMS WEBHOOK — Avtomatik to'lov tasdiqlash
-// =========================================================
-const SMS_SECRET_KEY = process.env.SMS_SECRET_KEY || 'SeningMaxfiyKaliting123!';
-
-app.post('/api/sms-receiver', async (req, res) => {
+  let avatarUrl = '';
   try {
-    const { message, secret } = req.body;
-
-    console.log('[SMS KELDI]:', message);
-
-    if (secret !== SMS_SECRET_KEY) {
-      console.warn('[SMS] Noto\'g\'ri secret');
-      return res.status(403).json({ success: false });
+    const userPhotos = await ctx.telegram.getUserProfilePhotos(ctx.from.id, 0, 1);
+    if (userPhotos.total_count > 0) {
+      const fileId = userPhotos.photos[0][0].file_id;
+      const fileLink = await ctx.telegram.getFileLink(fileId);
+      avatarUrl = fileLink.href;
     }
+  } catch (e) {}
 
-    if (!message) return res.status(400).json({ success: false });
-
-    // Summani SMS matnidan chiqarish
-    // Masalan: "1 000.00 UZS", "15000 so'm", "+50000 сум", "karta: 100000 UZS"
-    const amountMatch = message.match(/(?:karta|to'lov|tushdi|baza|summa|balans)[\s\S]*?([\d\s\.]+)\s*(?:UZS|so'm|sum|сум)/i) || 
-                        message.match(/([\d\s\.]+)\s*(?:UZS|so'm|sum|сум)/i) ||
-                        message.match(/(\d{3,})/); // Oddiy 3+ raqam
-
-    if (!amountMatch) {
-      console.log('[SMS] Summani topib bo\'lmadi:', message);
-      return res.status(200).json({ success: true, message: 'SMS qabul, summa topilmadi' });
-    }
-
-    const rawAmount = amountMatch[1].replace(/\s+/g, '').split('.')[0];
-    const amount = parseInt(rawAmount, 10);
-
-    if (amount < 100 || amount > 500000000) {
-      console.log(`[SMS] Summa chegarasi: ${amount}`);
-      return res.status(200).json({ success: true, message: 'SMS summa noto\'g\'ri' });
-    }
-
-    console.log(`[SMS PARSED] Summa: ${amount} so'm`);
-
-    // Telefon raqamini chiqarish (agar bor bo'lsa)
-    const phoneMatch = message.match(/(\+?\d{10,12})/);
-    const phone = phoneMatch ? phoneMatch[1].replace(/\D/g, '').slice(-9) : null;
-
-    // Kutilayotgan to'lovlardan shu summaga mos birorini topish
-    let foundDeposit = null;
-    const db = readDb();
-
-    for (const deposit of db.deposits) {
-      if (deposit.status === 'pending' && deposit.amount === amount) {
-        foundDeposit = deposit;
-        break;
-      }
-    }
-
-    if (foundDeposit) {
-      // **AVTOMATIK TASDIQLASH**
-      updateDb((d) => {
-        const dep = d.deposits.find((x) => x.id === foundDeposit.id);
-        if (dep && dep.status === 'pending') {
-          dep.status = 'confirmed';
-          getUser(d, foundDeposit.userId).balance += amount;
-
-          // Foydalanuvchiga xabar
-          if (bot) {
-            bot.sendMessage(
-              foundDeposit.userId,
-              `✅ To'lov AVTOMATIK tasdiqlandi!\n\n💰 ${amount.toLocaleString('uz-UZ')} so'm balansingizga tushdi.\n\n🕐 ${new Date().toLocaleString('uz-UZ')}`
-            ).catch(() => {});
-          }
-
-          console.log(`✅ [SMS AUTO] To'lov tasdiqlandi: ${foundDeposit.userId} -> ${amount} so'm`);
-        }
-      });
-
-      return res.status(200).json({ success: true, message: 'SMS tasdiqlandi, to\'lov avtomatik qabul qilindi' });
-    } else {
-      // Topilmasa — yangi deposit yaratish (foydalanuvchining telefoni bo'lsa)
-      if (phone) {
-        let foundUserId = null;
-        const tempDb = readDb();
-        for (const [userId, user] of Object.entries(tempDb.users)) {
-          const userPhone = String(userId).replace(/\D/g, '').slice(-9);
-          if (userPhone === phone) {
-            foundUserId = userId;
-            break;
-          }
-        }
-
-        if (foundUserId) {
-          // Avtomatik yangi deposit yaratish va tasdiqlash
-          updateDb((d) => {
-            getUser(d, foundUserId).balance += amount;
-            d.deposits.unshift({
-              id: nanoid(10),
-              userId: foundUserId,
-              amount,
-              method: 'p2p_sms_auto',
-              status: 'confirmed',
-              createdAt: new Date().toISOString()
-            });
-
-            if (bot) {
-              bot.sendMessage(
-                foundUserId,
-                `✅ SMS o'tkazma topildi va AVTOMATIK tasdiqlandi!\n\n💰 ${amount.toLocaleString('uz-UZ')} so'm balansingizga tushdi.`
-              ).catch(() => {});
-            }
-
-            console.log(`✅ [SMS NEW] Yangi deposit: ${foundUserId} -> ${amount} so'm`);
-          });
-
-          return res.status(200).json({ success: true, message: 'Yangi deposit yaratildi va tasdiqlandi' });
-        }
-      }
-
-      // Kutilayotgan topilmadi va telefon ham yo'q — adminga xabar
-      if (bot && process.env.OWNER_CHAT_ID) {
-        bot.sendMessage(
-          process.env.OWNER_CHAT_ID,
-          `📱 SMS keldi, avtomatik topib bo\'lmadi:\n\n💰 ${amount.toLocaleString('uz-UZ')} so'm\n📞 ${phone || 'raqam topilmadi'}\n📝 ${message.slice(0, 100)}\n\nQo'lda tekshiring!`
-        ).catch(() => {});
-      }
-
-      console.log(`⚠️ [SMS] Kutilayotgan top topilmadi: ${amount}`);
-      return res.status(200).json({ success: true, message: 'SMS qabul, adminga xabar yuborildi' });
-    }
-  } catch (err) {
-    console.error('[SMS ERROR]:', err.message);
-    return res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// =========================================================
-// P2P TO'LOV (CARD 2 CARD) — avtomatik hisob aniqlash
-// =========================================================
-app.post('/api/p2p-check', (req, res) => {
-  const { phone } = req.body;
-  if (!phone) return res.status(400).json({ ok: false, error: 'Telefon raqami kiritilmagan' });
-
-  const db = readDb();
-  const normalizedPhone = String(phone).replace(/\D/g, '').slice(-12);
-
-  // Telefon raqamiga mos hisob topish
-  let foundUser = null;
-  for (const [userId, user] of Object.entries(db.users)) {
-    if (String(userId).includes(normalizedPhone) || normalizedPhone.includes(String(userId).slice(-10))) {
-      foundUser = { userId, user };
-      break;
-    }
-  }
-
-  if (foundUser) {
-    res.json({ ok: true, found: true, userId: foundUser.userId, balance: foundUser.user.balance });
+  let users = (await storage.getItem('users')) || {};
+  if (!users[userId]) {
+    users[userId] = { id: userId, name: userName, username, avatar: avatarUrl, balance: 0, spent: 0, ordersCount: 0 };
   } else {
-    res.json({ ok: true, found: false, message: 'Foydalanuvchi topilmadi — SMS orqali yangi hisob yaratiladi' });
+    users[userId].avatar = avatarUrl || users[userId].avatar;
+    users[userId].name = userName;
+  }
+  await storage.setItem('users', users);
+
+  const startPhoto = await storage.getItem('startPhoto');
+  const webAppUrl = process.env.WEB_APP_URL || 'https://your-render-app.onrender.com';
+  const caption = `Assalomu alaykum **${userName}**!\n\n🔥 **OlovPay** xizmatiga xush kelibsiz!`;
+
+  // So'ralgan yangi tugmalar joylashuvi
+  const keyboard = Markup.inlineKeyboard([
+    [Markup.button.webApp('🛒 Do\'kon', webAppUrl)],
+    [Markup.button.url('📢 Yangilik', 'https://t.me/arkootzif'), Markup.button.url('🎧 Yordam', 'https://t.me/x7fan')]
+  ]);
+
+  if (startPhoto) {
+    ctx.replyWithPhoto({ url: startPhoto }, { caption, parse_mode: 'Markdown', ...keyboard });
+  } else {
+    ctx.reply(caption, { parse_mode: 'Markdown', ...keyboard });
   }
 });
 
-// =========================================================
-// BUYURTMA (XARID) — "pending" holatda yaratiladi, adminga
-// botdan to'liq ma'lumot bilan xabar boradi, admin tasdiqlaydi/
-// bekor qiladi (bekor qilinsa mablag' avtomatik qaytariladi).
-// =========================================================
-app.post('/api/orders', async (req, res) => {
-  const { userId, userName, gameId, type, packageIndex, playerId } = req.body;
-  const db = readDb();
-  const game = db.games.find((g) => g.id === gameId);
-  if (!game) return res.status(404).json({ ok: false, error: "O'yin topilmadi" });
-  const pkg = (game.types[type] || [])[packageIndex];
-  if (!pkg) return res.status(404).json({ ok: false, error: 'Paket topilmadi' });
+// Admin Panel
+bot.command('admin', async (ctx) => {
+  if (ctx.from.id.toString() !== OWNER_ID) return;
 
-  const user = getUser(db, userId);
-  if (user.balance < pkg.price) {
-    return res.status(400).json({ ok: false, error: 'Balans yetarli emas' });
+  await ctx.reply('👑 **Admin Panel**', {
+    parse_mode: 'Markdown',
+    ...Markup.inlineKeyboard([
+      [Markup.button.callback('📢 Banner Sozlash (Rasm/Video)', 'set_banner'), Markup.button.callback('🎮 O\'yin Yaratish', 'add_game')],
+      [Markup.button.callback('💎 O\'yinga Paket Qo\'shish', 'add_pack')],
+      [Markup.button.callback('💬 Fikrlarni Tozalash', 'clear_reviews'), Markup.button.callback('🗑 Buyurtmalarni Tozalash', 'clear_orders')]
+    ])
+  });
+});
+
+// Admin Handlers
+bot.action('set_banner', async (ctx) => {
+  if (ctx.from.id.toString() !== OWNER_ID) return;
+  adminState[OWNER_ID] = { step: 'AWAIT_BANNER' };
+  await ctx.answerCbQuery();
+  await ctx.reply("📢 **Banner uchun Galereyadan Video (5-10 sek) yoki Rasm yuboring:**");
+});
+
+bot.action('add_game', async (ctx) => {
+  if (ctx.from.id.toString() !== OWNER_ID) return;
+  adminState[OWNER_ID] = { step: 'AWAIT_GAME_NAME' };
+  await ctx.answerCbQuery();
+  await ctx.reply("🎮 **Yangi o'yin nomini kiriting (Masalan: PUBG Mobile):**");
+});
+
+bot.action('add_pack', async (ctx) => {
+  if (ctx.from.id.toString() !== OWNER_ID) return;
+  const games = (await storage.getItem('games')) || [];
+  if (games.length === 0) {
+    return ctx.reply("⚠️ Avval kamida bitta o'yin yarating!");
   }
+  
+  const buttons = games.map(g => [Markup.button.callback(g.name, `select_game_${g.id}`)]);
+  await ctx.reply("Qaysi o'yinga paket qo'shmoqchisiz?", Markup.inlineKeyboard(buttons));
+});
 
-  const orderId = nanoid(10);
-  user.balance -= pkg.price;
+bot.action(/select_game_(\d+)/, async (ctx) => {
+  const gameId = ctx.match[1];
+  adminState[OWNER_ID] = { step: 'AWAIT_PACK_TITLE', gameId };
+  await ctx.answerCbQuery();
+  await ctx.reply("💎 **Paket nomini kiriting (Masalan: 60 UC yoki Prime):**");
+});
 
-  let order;
-  updateDb((d) => {
-    const number = nextOrderNumber(d);
-    order = {
-      id: orderId,
-      number,
-      userId,
-      userName: userName || null,
-      gameName: game.name,
-      packageLabel: pkg.amt,
-      price: pkg.price,
-      playerId,
-      status: 'pending',
-      createdAt: new Date().toISOString()
-    };
-    d.orders.unshift(order);
-    getUser(d, userId).balance = user.balance;
-    
-    // TOP'ga avtomatik qo'shish (eng yangi xarid)
-    const existing = d.topUsers.find(t => t.name === (userName || 'User'));
-    if (existing) {
-      existing.amt = pkg.price.toLocaleString('uz-UZ');
-    } else {
-      d.topUsers.unshift({
-        rank: d.topUsers.length + 1,
-        medal: d.topUsers.length === 0 ? '🥇' : d.topUsers.length === 1 ? '🥈' : d.topUsers.length === 2 ? '🥉' : null,
-        name: userName || 'User',
-        sub: '1 buyurtma',
-        amt: pkg.price.toLocaleString('uz-UZ'),
-        initial: (userName || 'U')[0].toUpperCase()
-      });
-      d.topUsers = d.topUsers.slice(0, 10);
+// Admin Message Receiver
+bot.on(['photo', 'video', 'document', 'text'], async (ctx, next) => {
+  if (ctx.from.id.toString() !== OWNER_ID) return next();
+  const state = adminState[OWNER_ID];
+  if (!state) return next();
+
+  // Banner Upload (Video or Image)
+  if (state.step === 'AWAIT_BANNER') {
+    let fileId, type;
+    if (ctx.message.video) {
+      fileId = ctx.message.video.file_id;
+      type = 'video';
+    } else if (ctx.message.photo) {
+      fileId = ctx.message.photo[ctx.message.photo.length - 1].file_id;
+      type = 'image';
     }
-  });
 
-  if (bot && bot._sendOrderNotification) bot._sendOrderNotification(order);
-
-  res.json({ ok: true, order, balance: user.balance });
-});
-
-app.get('/api/orders/:userId', (req, res) => {
-  const db = readDb();
-  const orders = db.orders.filter((o) => o.userId === req.params.userId);
-  res.json({ ok: true, orders });
-});
-
-// =========================================================
-// TO'LDIRISH (DEPOSIT) — karta orqali, admin(lar) tasdiqlaydi
-// =========================================================
-app.post('/api/deposits', (req, res) => {
-  const { userId, amount, method } = req.body;
-  if (!userId || !amount) return res.status(400).json({ ok: false, error: "Ma'lumot yetarli emas" });
-  const amt = Number(amount);
-  if (amt < MIN_DEPOSIT) return res.status(400).json({ ok: false, error: `Minimal to'ldirish miqdori: ${MIN_DEPOSIT.toLocaleString('uz-UZ')} so'm` });
-  if (amt > MAX_DEPOSIT) return res.status(400).json({ ok: false, error: `Maksimal to'ldirish miqdori: ${MAX_DEPOSIT.toLocaleString('uz-UZ')} so'm` });
-
-  const deposit = {
-    id: nanoid(10),
-    userId,
-    amount: Number(amount),
-    method: method || 'uzcard',
-    status: 'pending',
-    createdAt: new Date().toISOString()
-  };
-  updateDb((db) => { db.deposits.unshift(deposit); getUser(db, userId); });
-
-  // Adminga xabar — to'lov so'rovi keldi
-  const db = readDb();
-  const allAdminIds = String(process.env.OWNER_CHAT_ID ? [process.env.OWNER_CHAT_ID] : []).split(',').filter(Boolean);
-  if (bot && allAdminIds.length > 0) {
-    const text = `💰 Yangi to'lov so'rovi\n\nFoydalanuvchi: ${userId}\nSumma: ${amt.toLocaleString('uz-UZ')} so'm\nUsul: ${(method || 'UZCARD').toUpperCase()}\nVaqt: ${new Date(deposit.createdAt).toLocaleString('uz-UZ')}\n\n✅ Tasdiqlang yoki ❌ Bekor qiling:`;
-    allAdminIds.forEach((adminId) => {
-      if (adminId.trim()) {
-        bot.sendMessage(adminId.trim(), text, {
-          reply_markup: { inline_keyboard: [[{ text: '✅ Tasdiqlash', callback_data: `dep_confirm_${deposit.id}` }, { text: '❌ Bekor qilish', callback_data: `dep_reject_${deposit.id}` }]] }
-        }).catch((e) => console.error('Admin xabari yuborilmadi:', e.message));
-      }
-    });
+    if (fileId) {
+      const link = await ctx.telegram.getFileLink(fileId);
+      let banners = (await storage.getItem('banners')) || [];
+      banners.push({ url: link.href, type });
+      if (banners.length > 3) banners.shift(); // Max 3 items
+      await storage.setItem('banners', banners);
+      delete adminState[OWNER_ID];
+      return ctx.reply("✅ **Yangi banner saqlandi!**");
+    }
   }
 
-  res.json({ ok: true, deposit });
+  // Create Game
+  if (state.step === 'AWAIT_GAME_NAME' && ctx.message.text) {
+    state.gameName = ctx.message.text;
+    state.step = 'AWAIT_GAME_PHOTO';
+    return ctx.reply("🖼 **O'yin rasmini (Galereyadan) yuboring:**");
+  }
+
+  if (state.step === 'AWAIT_GAME_PHOTO' && ctx.message.photo) {
+    const fileId = ctx.message.photo[ctx.message.photo.length - 1].file_id;
+    const link = await ctx.telegram.getFileLink(fileId);
+    let games = (await storage.getItem('games')) || [];
+    games.push({ id: Date.now().toString(), name: state.gameName, img: link.href, packs: [] });
+    await storage.setItem('games', games);
+    delete adminState[OWNER_ID];
+    return ctx.reply(`🎉 **${state.gameName}** o'yini yaratildi!`);
+  }
+
+  // Add Pack Steps
+  if (state.step === 'AWAIT_PACK_TITLE' && ctx.message.text) {
+    state.packTitle = ctx.message.text;
+    state.step = 'AWAIT_PACK_PRICE';
+    return ctx.reply("💰 **Paket narxini kiriting (faqat raqam, masalan: 12000):**");
+  }
+
+  if (state.step === 'AWAIT_PACK_PRICE' && ctx.message.text) {
+    state.packPrice = Number(ctx.message.text);
+    state.step = 'AWAIT_PACK_ICON';
+    return ctx.reply("🖼 **Paket ikonkasi uchun PNG rasm yuboring:**");
+  }
+
+  if (state.step === 'AWAIT_PACK_ICON' && (ctx.message.photo || ctx.message.document)) {
+    const fileId = ctx.message.photo ? ctx.message.photo[ctx.message.photo.length - 1].file_id : ctx.message.document.file_id;
+    const link = await ctx.telegram.getFileLink(fileId);
+
+    let games = (await storage.getItem('games')) || [];
+    const game = games.find(g => g.id === state.gameId);
+    if (game) {
+      game.packs.push({ id: Date.now().toString(), title: state.packTitle, price: state.packPrice, icon: link.href });
+      await storage.setItem('games', games);
+      ctx.reply(`✅ **${state.packTitle}** paketi qo'shildi!`);
+    }
+    delete adminState[OWNER_ID];
+    return;
+  }
+
+  // Chek skrinshoti qabul qilish
+  if (state.step === 'AWAIT_RECEIPT' && (ctx.message.photo || ctx.message.document)) {
+    await ctx.reply("✅ **Chekingiz qabul qilindi va adminga yuborildi! Tekshirilgach balans to'ldiriladi.**");
+    delete adminState[OWNER_ID];
+    return;
+  }
+
+  return next();
 });
 
-app.get('/api/deposits/:id', (req, res) => {
-  const db = readDb();
-  const deposit = db.deposits.find((d) => d.id === req.params.id);
-  if (!deposit) return res.status(404).json({ ok: false });
-  res.json({ ok: true, deposit });
+// Admin Approval Actions for Purchases
+bot.action(/approve_order_(\d+)_(.+)/, async (ctx) => {
+  const userId = ctx.match[1];
+  const orderId = ctx.match[2];
+
+  let orders = (await storage.getItem('orders')) || [];
+  const order = orders.find(o => o.id === orderId);
+  if (order) {
+    order.status = 'approved';
+    await storage.setItem('orders', orders);
+
+    let users = (await storage.getItem('users')) || {};
+    if (users[userId]) {
+      users[userId].spent = (users[userId].spent || 0) + order.price;
+      users[userId].ordersCount = (users[userId].ordersCount || 0) + 1;
+      await storage.setItem('users', users);
+    }
+    await ctx.editMessageText(ctx.callbackQuery.message.text + '\n\n✅ **TASDIQLANDI VA TOPGA QO\'SHILDI**');
+    bot.telegram.sendMessage(userId, `🎉 **${order.packTitle}** xaridingiz tasdiqlandi!`).catch(() => {});
+  }
 });
 
-// =========================================================
-// FIKR (REVIEW)
-// =========================================================
-app.post('/api/reviews', (req, res) => {
-  const { name, stars, text } = req.body;
-  const review = { name: name || 'Mehmon', stars: Math.min(5, Math.max(1, Number(stars) || 5)), text: text || '' };
-  updateDb((db) => { db.reviews.unshift(review); db.reviews = db.reviews.slice(0, 30); });
-  res.json({ ok: true, review });
-});
+bot.launch();
 
-// =========================================================
-// REFERAL
-// =========================================================
-app.get('/api/referral/:userId', (req, res) => {
-  const db = readDb();
-  const user = getUser(db, req.params.userId);
-  const botUsername = getBotUsername();
-  const refLink = botUsername ? `https://t.me/${botUsername}?start=${user.refCode}` : null;
-  res.json({ ok: true, refCode: user.refCode, refLink, refCount: user.refCount, refEarned: user.refEarned });
-});
+// ================= API ENDPOINTS =================
 
-// =========================================================
-// ===================  A D M I N   P A N E L  ===============
-// =========================================================
-
-// ---- Splash logo ----
-app.post('/api/admin/splash', requireAdmin, upload.single('logo'), (req, res) => {
-  if (!req.file) return res.status(400).json({ ok: false, error: 'Fayl yo\'q' });
-  const url = `/uploads/${req.file.filename}`;
-  updateDb((db) => { db.splashLogo = url; });
-  res.json({ ok: true, url });
-});
-
-// ---- Banners (qat'iy 3 slot: 0,1,2) ----
-app.post('/api/admin/banners/:slot', requireAdmin, upload.single('image'), (req, res) => {
-  const slot = Number(req.params.slot);
-  if (![0, 1, 2].includes(slot)) return res.status(400).json({ ok: false, error: "Slot 0-2 oralig'ida bo'lishi kerak" });
-  const { title, sub } = req.body;
-  const image = req.file ? `/uploads/${req.file.filename}` : req.body.image;
-  updateDb((db) => {
-    db.banners[slot] = { image, title: title || '', sub: sub || '' };
+app.get('/api/config', async (req, res) => {
+  res.json({
+    banners: (await storage.getItem('banners')) || [],
+    games: (await storage.getItem('games')) || [],
+    reviews: (await storage.getItem('reviews')) || []
   });
-  res.json({ ok: true });
 });
 
-app.delete('/api/admin/banners/:slot', requireAdmin, (req, res) => {
-  const slot = Number(req.params.slot);
-  updateDb((db) => { db.banners[slot] = null; });
-  res.json({ ok: true });
+app.get('/api/top-users', async (req, res) => {
+  const users = (await storage.getItem('users')) || {};
+  const sorted = Object.values(users)
+    .filter(u => u.spent > 0)
+    .sort((a, b) => b.spent - a.spent)
+    .slice(0, 10);
+  res.json(sorted);
 });
 
-// ---- Games ----
-app.post('/api/admin/games', requireAdmin, upload.single('image'), (req, res) => {
-  const { name, rating } = req.body;
-  const image = req.file ? `/uploads/${req.file.filename}` : req.body.image;
-  const game = { id: nanoid(8), name, rating: rating || '5 · 0', image, types: { uc: [], prime: [] } };
-  updateDb((db) => { db.games.push(game); });
-  res.json({ ok: true, game });
+app.post('/api/buy', async (req, res) => {
+  const { userId, packTitle, price, playerId } = req.body;
+  let users = (await storage.getItem('users')) || {};
+  const user = users[userId];
+
+  if (!user || user.balance < price) {
+    return res.json({ success: false, message: "Mablag' yetarli emas!" });
+  }
+
+  user.balance -= price;
+  await storage.setItem('users', users);
+
+  const orderId = Date.now().toString();
+  let orders = (await storage.getItem('orders')) || [];
+  orders.push({ id: orderId, userId, userName: user.name, packTitle, price, playerId, status: 'pending' });
+  await storage.setItem('orders', orders);
+
+  // Send Notification to Owner
+  bot.telegram.sendMessage(OWNER_ID, `🛒 **Yangi Buyurtma!**\n\n👤 User: ${user.name}\n🎮 ID: \`${playerId}\`\n💎 Paket: ${packTitle}\n💰 Narx: ${price} so'm`, {
+    parse_mode: 'Markdown',
+    ...Markup.inlineKeyboard([[Markup.button.callback('✅ Tasdiqlash', `approve_order_${userId}_${orderId}`)]])
+  }).catch(() => {});
+
+  res.json({ success: true, newBalance: user.balance });
 });
 
-app.put('/api/admin/games/:id', requireAdmin, upload.single('image'), (req, res) => {
-  const { name, rating } = req.body;
-  updateDb((db) => {
-    const game = db.games.find((g) => g.id === req.params.id);
-    if (!game) return;
-    if (name) game.name = name;
-    if (rating) game.rating = rating;
-    if (req.file) game.image = `/uploads/${req.file.filename}`;
-  });
-  res.json({ ok: true });
+// React to Reviews
+app.post('/api/reviews/react', async (req, res) => {
+  const { reviewId, emoji } = req.body;
+  let reviews = (await storage.getItem('reviews')) || [];
+  const review = reviews.find(r => r.id === reviewId);
+  if (review) {
+    if (!review.reactions) review.reactions = {};
+    review.reactions[emoji] = (review.reactions[emoji] || 0) + 1;
+    await storage.setItem('reviews', reviews);
+  }
+  res.json({ success: true });
 });
 
-app.delete('/api/admin/games/:id', requireAdmin, (req, res) => {
-  updateDb((db) => { db.games = db.games.filter((g) => g.id !== req.params.id); });
-  res.json({ ok: true });
-});
+app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
-// ---- Game packages (UC / Prime paketlari) ----
-app.post('/api/admin/games/:id/packages', requireAdmin, (req, res) => {
-  const { type, icon, amt, price } = req.body; // type: 'uc' | 'prime'
-  updateDb((db) => {
-    const game = db.games.find((g) => g.id === req.params.id);
-    if (!game) return;
-    if (!game.types[type]) game.types[type] = [];
-    game.types[type].push({ icon: icon || '🪙', amt, price: Number(price) });
-  });
-  res.json({ ok: true });
-});
-
-app.delete('/api/admin/games/:id/packages/:type/:index', requireAdmin, (req, res) => {
-  updateDb((db) => {
-    const game = db.games.find((g) => g.id === req.params.id);
-    if (!game || !game.types[req.params.type]) return;
-    game.types[req.params.type].splice(Number(req.params.index), 1);
-  });
-  res.json({ ok: true });
-});
-
-// ---- Top xaridorlar (admin qo'lda kiritadi yoki avto hisoblanadi) ----
-app.post('/api/admin/top', requireAdmin, (req, res) => {
-  const { topUsers } = req.body; // to'liq massiv almashtiriladi
-  updateDb((db) => { db.topUsers = topUsers; });
-  res.json({ ok: true });
-});
-
-// ---- Deposits: ro'yxat + qo'lda tasdiqlash (bot orqali ham bo'ladi) ----
-app.get('/api/admin/deposits', requireAdmin, (req, res) => {
-  const db = readDb();
-  res.json({ ok: true, deposits: db.deposits });
-});
-
-app.post('/api/admin/deposits/:id/confirm', requireAdmin, (req, res) => {
-  updateDb((db) => {
-    const dep = db.deposits.find((d) => d.id === req.params.id);
-    if (!dep || dep.status !== 'pending') return;
-    dep.status = 'confirmed';
-    getUser(db, dep.userId).balance += dep.amount;
-  });
-  res.json({ ok: true });
-});
-
-app.post('/api/admin/deposits/:id/reject', requireAdmin, (req, res) => {
-  updateDb((db) => {
-    const dep = db.deposits.find((d) => d.id === req.params.id);
-    if (!dep) return;
-    dep.status = 'rejected';
-  });
-  res.json({ ok: true });
-});
-
-// ---- Orders (admin ko'rish uchun) ----
-app.get('/api/admin/orders', requireAdmin, (req, res) => {
-  const db = readDb();
-  res.json({ ok: true, orders: db.orders });
-});
-
-app.post('/api/admin/orders/:id/status', requireAdmin, (req, res) => {
-  const { status } = req.body;
-  updateDb((db) => {
-    const order = db.orders.find((o) => o.id === req.params.id);
-    if (order) order.status = status;
-  });
-  res.json({ ok: true });
-});
-
-// ---- Reviews (admin o'chira oladi) ----
-app.delete('/api/admin/reviews/:index', requireAdmin, (req, res) => {
-  updateDb((db) => { db.reviews.splice(Number(req.params.index), 1); });
-  res.json({ ok: true });
-});
-
-app.listen(PORT, () => {
-  console.log(`✅ FlayPay server ${PORT}-portda ishga tushdi`);
-  console.log(`   Sayt:  http://localhost:${PORT}`);
-  console.log(`   Admin: http://localhost:${PORT}/admin.html`);
-});
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
