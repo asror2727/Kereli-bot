@@ -1,286 +1,179 @@
 const express = require('express');
-const path = require('path');
 const cors = require('cors');
-const storage = require('node-persist');
-const { Telegraf, Markup } = require('telegraf');
+const path = require('path');
+const axios = require('axios'); // API so'rovlar uchun (npm i axios)
 
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.use(express.static(__dirname));
+app.use(express.static(path.join(__dirname, 'public')));
 
-const BOT_TOKEN = process.env.BOT_TOKEN || 'YOUR_BOT_TOKEN_HERE';
-const OWNER_ID = process.env.OWNER_ID || '7651404790';
+/* ==================== DATABASE (IN-MEMORY) ==================== */
+let DB = {
+  users: {},
+  deposits: {},
+  orders: [],
+  reviews: [],
+  config: {
+    splashLogo: '/uploads/logo.png',
+    musicUrl: '',
+    banners: [],
+    games: [],
+    topUsers: []
+  }
+};
 
-const bot = new Telegraf(BOT_TOKEN);
-const adminState = {};
-
-(async () => {
-  await storage.init({ dir: './.dbdata' });
-
-  if (!(await storage.getItem('banners'))) await storage.setItem('banners', []);
-  if (!(await storage.getItem('games'))) await storage.setItem('games', []);
-  if (!(await storage.getItem('reviews'))) await storage.setItem('reviews', []);
-  if (!(await storage.getItem('orders'))) await storage.setItem('orders', []);
-  if (!(await storage.getItem('users'))) await storage.setItem('users', {});
-})();
-
-// ================= TELEGRAM BOT LOGIC =================
-
-bot.start(async (ctx) => {
-  const userId = ctx.from.id.toString();
-  const userName = ctx.from.first_name || 'Foydalanuvchi';
-  const username = ctx.from.username ? `@${ctx.from.username}` : '';
-
-  let avatarUrl = '';
+/* ==================== AUTO P2P CHECKER ==================== */
+// Bank/SMS Gateway API orqali tranzaksiyani tekshirish funksiyasi
+async function checkRealBankTransaction(cardHolder, amount, checkCode) {
   try {
-    const userPhotos = await ctx.telegram.getUserProfilePhotos(ctx.from.id, 0, 1);
-    if (userPhotos.total_count > 0) {
-      const fileId = userPhotos.photos[0][0].file_id;
-      const fileLink = await ctx.telegram.getFileLink(fileId);
-      avatarUrl = fileLink.href;
-    }
-  } catch (e) {}
+    /* 
+      BU YERGA REAL BANK / MERCHANT API INTEGRATSIYASI ULATILADI:
+      Masalan, Click/Payme Merchant API yoki SMS Gateway serveringiz.
+      Ushbu so'rov bank billingingizga boradi va oxirgi tushgan to'lovlarni tekshiradi.
+    */
+    
+    // Natijani simulyatsiya qilish (Haqiqiy API berilgan javobni qabul qiladi):
+    // const response = await axios.post('YOUR_BANK_OR_GATEWAY_ENDPOINT', { amount, checkCode });
+    // return response.data.isPaid; // true yoki false
 
-  let users = (await storage.getItem('users')) || {};
-  if (!users[userId]) {
-    users[userId] = { id: userId, name: userName, username, avatar: avatarUrl, balance: 0, spent: 0, ordersCount: 0 };
-  } else {
-    users[userId].avatar = avatarUrl || users[userId].avatar;
-    users[userId].name = userName;
+    return false; // Standart holatda to'lov topilmasa false qaytaradi
+  } catch (error) {
+    return false;
   }
-  await storage.setItem('users', users);
+}
 
-  const startPhoto = await storage.getItem('startPhoto');
-  const webAppUrl = process.env.WEB_APP_URL || 'https://your-render-app.onrender.com';
-  const caption = `Assalomu alaykum **${userName}**!\n\n🔥 **OlovPay** xizmatiga xush kelibsiz!`;
+/* ==================== API ENDPOINTS ==================== */
 
-  // So'ralgan yangi tugmalar joylashuvi
-  const keyboard = Markup.inlineKeyboard([
-    [Markup.button.webApp('🛒 Do\'kon', webAppUrl)],
-    [Markup.button.url('📢 Yangilik', 'https://t.me/arkootzif'), Markup.button.url('🎧 Yordam', 'https://t.me/x7fan')]
-  ]);
+// 1. Konfiguratsiyani olish
+app.get('/api/config', (req, res) => {
+  res.json(DB.config);
+});
 
-  if (startPhoto) {
-    ctx.replyWithPhoto({ url: startPhoto }, { caption, parse_mode: 'Markdown', ...keyboard });
-  } else {
-    ctx.reply(caption, { parse_mode: 'Markdown', ...keyboard });
+// 2. Foydalanuvchi ma'lumotlarini olish
+app.get('/api/user/:userId', (req, res) => {
+  const { userId } = req.params;
+  if (!DB.users[userId]) {
+    DB.users[userId] = { id: userId, balance: 0, refCount: 0, refEarned: 0 };
   }
+  res.json({ user: DB.users[userId] });
 });
 
-// Admin Panel
-bot.command('admin', async (ctx) => {
-  if (ctx.from.id.toString() !== OWNER_ID) return;
+// 3. Avto-P2P To'lov Yaratish
+app.post('/api/deposits', (req, res) => {
+  const { userId, amount, method } = req.body;
+  if (!userId || !amount) return res.status(400).json({ ok: false, error: 'Xato ma\'lumot' });
 
-  await ctx.reply('👑 **Admin Panel**', {
-    parse_mode: 'Markdown',
-    ...Markup.inlineKeyboard([
-      [Markup.button.callback('📢 Banner Sozlash (Rasm/Video)', 'set_banner'), Markup.button.callback('🎮 O\'yin Yaratish', 'add_game')],
-      [Markup.button.callback('💎 O\'yinga Paket Qo\'shish', 'add_pack')],
-      [Markup.button.callback('💬 Fikrlarni Tozalash', 'clear_reviews'), Markup.button.callback('🗑 Buyurtmalarni Tozalash', 'clear_orders')]
-    ])
-  });
+  const depositId = 'dep_' + Date.now();
+  // Unikal to'lov kodi (Masalan foydalanuvchi izohga yozishi uchun)
+  const checkCode = Math.floor(1000 + Math.random() * 9000); 
+
+  const newDeposit = {
+    id: depositId,
+    userId,
+    amount: Number(amount),
+    checkCode,
+    method: method || 'auto_p2p',
+    status: 'pending',
+    createdAt: new Date()
+  };
+
+  DB.deposits[depositId] = newDeposit;
+
+  // SIZGA HECH QANDAY TELEGRAM HABAR BORMAYDI!
+  res.json({ ok: true, deposit: newDeposit });
 });
 
-// Admin Handlers
-bot.action('set_banner', async (ctx) => {
-  if (ctx.from.id.toString() !== OWNER_ID) return;
-  adminState[OWNER_ID] = { step: 'AWAIT_BANNER' };
-  await ctx.answerCbQuery();
-  await ctx.reply("📢 **Banner uchun Galereyadan Video (5-10 sek) yoki Rasm yuboring:**");
-});
+// 4. Auto-Deposit Polling (HTML frontend har 3-5 soniyada avto tekshiradi)
+app.get('/api/deposits/:depositId', async (req, res) => {
+  const depositId = req.params.depositId;
+  const deposit = DB.deposits[depositId];
 
-bot.action('add_game', async (ctx) => {
-  if (ctx.from.id.toString() !== OWNER_ID) return;
-  adminState[OWNER_ID] = { step: 'AWAIT_GAME_NAME' };
-  await ctx.answerCbQuery();
-  await ctx.reply("🎮 **Yangi o'yin nomini kiriting (Masalan: PUBG Mobile):**");
-});
+  if (!deposit) return res.status(404).json({ ok: false, error: 'Topilmadi' });
 
-bot.action('add_pack', async (ctx) => {
-  if (ctx.from.id.toString() !== OWNER_ID) return;
-  const games = (await storage.getItem('games')) || [];
-  if (games.length === 0) {
-    return ctx.reply("⚠️ Avval kamida bitta o'yin yarating!");
-  }
-  
-  const buttons = games.map(g => [Markup.button.callback(g.name, `select_game_${g.id}`)]);
-  await ctx.reply("Qaysi o'yinga paket qo'shmoqchisiz?", Markup.inlineKeyboard(buttons));
-});
+  // Agar to'lov hali kutish holatida bo'lsa, bankizdan avto-tekshiramiz
+  if (deposit.status === 'pending') {
+    const isPaid = await checkRealBankTransaction(deposit.userId, deposit.amount, deposit.checkCode);
 
-bot.action(/select_game_(\d+)/, async (ctx) => {
-  const gameId = ctx.match[1];
-  adminState[OWNER_ID] = { step: 'AWAIT_PACK_TITLE', gameId };
-  await ctx.answerCbQuery();
-  await ctx.reply("💎 **Paket nomini kiriting (Masalan: 60 UC yoki Prime):**");
-});
+    if (isPaid) {
+      deposit.status = 'confirmed';
 
-// Admin Message Receiver
-bot.on(['photo', 'video', 'document', 'text'], async (ctx, next) => {
-  if (ctx.from.id.toString() !== OWNER_ID) return next();
-  const state = adminState[OWNER_ID];
-  if (!state) return next();
-
-  // Banner Upload (Video or Image)
-  if (state.step === 'AWAIT_BANNER') {
-    let fileId, type;
-    if (ctx.message.video) {
-      fileId = ctx.message.video.file_id;
-      type = 'video';
-    } else if (ctx.message.photo) {
-      fileId = ctx.message.photo[ctx.message.photo.length - 1].file_id;
-      type = 'image';
-    }
-
-    if (fileId) {
-      const link = await ctx.telegram.getFileLink(fileId);
-      let banners = (await storage.getItem('banners')) || [];
-      banners.push({ url: link.href, type });
-      if (banners.length > 3) banners.shift(); // Max 3 items
-      await storage.setItem('banners', banners);
-      delete adminState[OWNER_ID];
-      return ctx.reply("✅ **Yangi banner saqlandi!**");
+      // Balansni avtomatik to'ldirish
+      if (!DB.users[deposit.userId]) {
+        DB.users[deposit.userId] = { id: deposit.userId, balance: 0 };
+      }
+      DB.users[deposit.userId].balance += deposit.amount;
     }
   }
 
-  // Create Game
-  if (state.step === 'AWAIT_GAME_NAME' && ctx.message.text) {
-    state.gameName = ctx.message.text;
-    state.step = 'AWAIT_GAME_PHOTO';
-    return ctx.reply("🖼 **O'yin rasmini (Galereyadan) yuboring:**");
-  }
-
-  if (state.step === 'AWAIT_GAME_PHOTO' && ctx.message.photo) {
-    const fileId = ctx.message.photo[ctx.message.photo.length - 1].file_id;
-    const link = await ctx.telegram.getFileLink(fileId);
-    let games = (await storage.getItem('games')) || [];
-    games.push({ id: Date.now().toString(), name: state.gameName, img: link.href, packs: [] });
-    await storage.setItem('games', games);
-    delete adminState[OWNER_ID];
-    return ctx.reply(`🎉 **${state.gameName}** o'yini yaratildi!`);
-  }
-
-  // Add Pack Steps
-  if (state.step === 'AWAIT_PACK_TITLE' && ctx.message.text) {
-    state.packTitle = ctx.message.text;
-    state.step = 'AWAIT_PACK_PRICE';
-    return ctx.reply("💰 **Paket narxini kiriting (faqat raqam, masalan: 12000):**");
-  }
-
-  if (state.step === 'AWAIT_PACK_PRICE' && ctx.message.text) {
-    state.packPrice = Number(ctx.message.text);
-    state.step = 'AWAIT_PACK_ICON';
-    return ctx.reply("🖼 **Paket ikonkasi uchun PNG rasm yuboring:**");
-  }
-
-  if (state.step === 'AWAIT_PACK_ICON' && (ctx.message.photo || ctx.message.document)) {
-    const fileId = ctx.message.photo ? ctx.message.photo[ctx.message.photo.length - 1].file_id : ctx.message.document.file_id;
-    const link = await ctx.telegram.getFileLink(fileId);
-
-    let games = (await storage.getItem('games')) || [];
-    const game = games.find(g => g.id === state.gameId);
-    if (game) {
-      game.packs.push({ id: Date.now().toString(), title: state.packTitle, price: state.packPrice, icon: link.href });
-      await storage.setItem('games', games);
-      ctx.reply(`✅ **${state.packTitle}** paketi qo'shildi!`);
-    }
-    delete adminState[OWNER_ID];
-    return;
-  }
-
-  // Chek skrinshoti qabul qilish
-  if (state.step === 'AWAIT_RECEIPT' && (ctx.message.photo || ctx.message.document)) {
-    await ctx.reply("✅ **Chekingiz qabul qilindi va adminga yuborildi! Tekshirilgach balans to'ldiriladi.**");
-    delete adminState[OWNER_ID];
-    return;
-  }
-
-  return next();
+  res.json({ ok: true, deposit });
 });
 
-// Admin Approval Actions for Purchases
-bot.action(/approve_order_(\d+)_(.+)/, async (ctx) => {
-  const userId = ctx.match[1];
-  const orderId = ctx.match[2];
-
-  let orders = (await storage.getItem('orders')) || [];
-  const order = orders.find(o => o.id === orderId);
-  if (order) {
-    order.status = 'approved';
-    await storage.setItem('orders', orders);
-
-    let users = (await storage.getItem('users')) || {};
-    if (users[userId]) {
-      users[userId].spent = (users[userId].spent || 0) + order.price;
-      users[userId].ordersCount = (users[userId].ordersCount || 0) + 1;
-      await storage.setItem('users', users);
-    }
-    await ctx.editMessageText(ctx.callbackQuery.message.text + '\n\n✅ **TASDIQLANDI VA TOPGA QO\'SHILDI**');
-    bot.telegram.sendMessage(userId, `🎉 **${order.packTitle}** xaridingiz tasdiqlandi!`).catch(() => {});
-  }
+// 5. Izoh bildirish API
+app.post('/api/reviews', (req, res) => {
+  const { name, stars, text } = req.body;
+  const newReview = { id: 'rev_' + Date.now(), name, stars: Number(stars), text, reactions: {} };
+  DB.reviews.unshift(newReview);
+  res.json({ ok: true, review: newReview });
 });
 
-bot.launch();
-
-// ================= API ENDPOINTS =================
-
-app.get('/api/config', async (req, res) => {
-  res.json({
-    banners: (await storage.getItem('banners')) || [],
-    games: (await storage.getItem('games')) || [],
-    reviews: (await storage.getItem('reviews')) || []
-  });
-});
-
-app.get('/api/top-users', async (req, res) => {
-  const users = (await storage.getItem('users')) || {};
-  const sorted = Object.values(users)
-    .filter(u => u.spent > 0)
-    .sort((a, b) => b.spent - a.spent)
-    .slice(0, 10);
-  res.json(sorted);
-});
-
-app.post('/api/buy', async (req, res) => {
-  const { userId, packTitle, price, playerId } = req.body;
-  let users = (await storage.getItem('users')) || {};
-  const user = users[userId];
-
-  if (!user || user.balance < price) {
-    return res.json({ success: false, message: "Mablag' yetarli emas!" });
-  }
-
-  user.balance -= price;
-  await storage.setItem('users', users);
-
-  const orderId = Date.now().toString();
-  let orders = (await storage.getItem('orders')) || [];
-  orders.push({ id: orderId, userId, userName: user.name, packTitle, price, playerId, status: 'pending' });
-  await storage.setItem('orders', orders);
-
-  // Send Notification to Owner
-  bot.telegram.sendMessage(OWNER_ID, `🛒 **Yangi Buyurtma!**\n\n👤 User: ${user.name}\n🎮 ID: \`${playerId}\`\n💎 Paket: ${packTitle}\n💰 Narx: ${price} so'm`, {
-    parse_mode: 'Markdown',
-    ...Markup.inlineKeyboard([[Markup.button.callback('✅ Tasdiqlash', `approve_order_${userId}_${orderId}`)]])
-  }).catch(() => {});
-
-  res.json({ success: true, newBalance: user.balance });
-});
-
-// React to Reviews
-app.post('/api/reviews/react', async (req, res) => {
-  const { reviewId, emoji } = req.body;
-  let reviews = (await storage.getItem('reviews')) || [];
-  const review = reviews.find(r => r.id === reviewId);
+app.post('/api/reviews/react', (req, res) => {
+  const { reviewId, emoji, userId } = req.body;
+  const review = DB.reviews.find(r => r.id === reviewId);
   if (review) {
     if (!review.reactions) review.reactions = {};
-    review.reactions[emoji] = (review.reactions[emoji] || 0) + 1;
-    await storage.setItem('reviews', reviews);
+    if (!review.reactions[emoji]) review.reactions[emoji] = [];
+    const idx = review.reactions[emoji].indexOf(userId);
+    if (idx > -1) review.reactions[emoji].splice(idx, 1);
+    else review.reactions[emoji].push(userId);
   }
-  res.json({ success: true });
+  res.json({ ok: true });
 });
 
-app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+// 6. Player ID va Buyurtma berish
+app.post('/api/check-id', (req, res) => {
+  const { playerId } = req.body;
+  res.json({ ok: true, found: Boolean(playerId && playerId.length >= 5), nickname: 'Player_' + playerId?.slice(-4) });
+});
 
+app.post('/api/orders', (req, res) => {
+  const { userId, gameId, type, packageIndex, playerId } = req.body;
+  const user = DB.users[userId];
+  const game = DB.config.games.find(g => g.id === gameId);
+  const pkg = game?.types?.[type]?.[packageIndex];
+
+  if (!user || !pkg || user.balance < pkg.price) {
+    return res.status(400).json({ ok: false, error: 'Balans yetarli emas yoki xatolik' });
+  }
+
+  user.balance -= pkg.price;
+  const order = {
+    number: Math.floor(100000 + Math.random() * 900000),
+    gameName: game.name,
+    packageLabel: pkg.amt,
+    price: pkg.price,
+    playerId,
+    status: 'pending',
+    createdAt: new Date()
+  };
+
+  DB.orders.unshift({ userId, ...order });
+  res.json({ ok: true, balance: user.balance, order });
+});
+
+app.get('/api/orders/:userId', (req, res) => {
+  res.json({ orders: DB.orders.filter(o => o.userId === req.params.userId) });
+});
+
+app.get('/api/referral/:userId', (req, res) => {
+  const user = DB.users[req.params.userId] || {};
+  res.json({
+    refLink: `https://t.me/SizningBotingiz?start=${req.params.userId}`,
+    refCount: user.refCount || 0,
+    refEarned: user.refEarned || 0
+  });
+});
+
+/* ==================== SERVER LAUNCH ==================== */
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Avto-P2P Server ishlamoqda: port ${PORT}`));
