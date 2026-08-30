@@ -70,17 +70,16 @@
     .action-card { background: var(--card-bg); border: 1px solid rgba(255, 255, 255, 0.06); padding: 14px; border-radius: 16px; display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 14px; cursor: pointer; }
     .action-card i { color: var(--fire-orange); font-size: 18px; }
 
-    /* BANNER STYLES */
     .banner-container { position: relative; border-radius: 18px; overflow: hidden; margin-top: 14px; border: 1px solid var(--card-border); height: 120px; background: var(--card-bg); }
     .banner-slide { position: absolute; inset: 0; opacity: 0; transition: opacity 0.8s ease-in-out; background-size: cover; background-position: center; display: flex; align-items: flex-end; padding: 14px; }
     .banner-slide.active { opacity: 1; }
-    .banner-slide video { width: 100%; height: 100%; object-fit: cover; position: absolute; inset: 0; padding: 0; }
     .banner-slide.empty { display: flex; align-items: center; justify-content: center; }
     .banner-empty-hint { color: var(--text-sub); font-size: 12px; display:flex; flex-direction:column; align-items:center; gap:6px; }
     .banner-empty-hint i { font-size: 20px; color: var(--fire-orange); opacity: .6; }
     .banner-dots { position: absolute; bottom: 8px; right: 12px; display: flex; gap: 5px; z-index: 2; }
     .banner-dot { width: 5px; height: 5px; border-radius: 50%; background: rgba(255,255,255,0.35); }
     .banner-dot.active { background: var(--fire-orange); width: 14px; border-radius: 3px; }
+    .banner-text { background: rgba(0, 0, 0, 0.65); backdrop-filter: blur(6px); padding: 8px 12px; border-radius: 10px; border-left: 3px solid var(--fire-orange); }
 
     .sec-title { font-size: 17px; font-weight: 800; margin: 18px 0 12px; display: flex; align-items: center; gap: 8px; }
     .sec-title i { color: var(--fire-orange); }
@@ -105,61 +104,10 @@
       font-weight: 800; font-size: 14px; text-shadow: 0 2px 6px rgba(0,0,0,0.6);
     }
 
-    .reviews-box { background: var(--card-bg); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 16px; padding: 14px; margin-top: 10px; min-height: 60px; cursor: pointer; transition: border-color 0.2s; }
-    .reviews-box:hover { border-color: var(--fire-orange); }
+    .reviews-box { background: var(--card-bg); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 16px; padding: 14px; margin-top: 10px; min-height: 60px; }
     .review-slide { display: none; animation: fadeIn 0.4s ease; }
     .review-slide.active { display: block; }
     .stars { color: var(--fire-yellow); font-size: 13px; margin-bottom: 4px; }
-
-    /* REAKSIONLAR VA IZOHLAR MODALI */
-    .reviews-modal-content {
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      border-radius: 20px;
-      padding: 18px;
-      width: 100%;
-      max-width: 400px;
-      max-height: 80vh;
-      display: flex;
-      flex-direction: column;
-    }
-    .reviews-list-full {
-      overflow-y: auto;
-      margin-top: 12px;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      padding-right: 4px;
-    }
-    .review-card-item {
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid rgba(255, 255, 255, 0.06);
-      border-radius: 14px;
-      padding: 12px;
-    }
-    .reactions-bar {
-      display: flex;
-      gap: 8px;
-      margin-top: 10px;
-    }
-    .reaction-btn {
-      background: #000;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 12px;
-      padding: 4px 8px;
-      font-size: 12px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      color: var(--text-sub);
-      transition: all 0.2s ease;
-    }
-    .reaction-btn.active {
-      border-color: var(--fire-orange);
-      background: rgba(255, 69, 0, 0.15);
-      color: #fff;
-    }
 
     .pay-methods { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
     .pay-card { background: var(--card-bg); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 16px; padding: 14px; cursor: pointer; }
@@ -208,7 +156,7 @@
     .check-box { background: var(--card-bg); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 14px; margin: 14px 0; }
     .check-row { display: flex; gap: 8px; }
     .check-input { flex: 1; background: #000; border: 1px solid var(--card-border); border-radius: 10px; padding: 12px; color: #fff; font-size: 14px; outline: none; }
-    .check-btn { background: var(--card-bg); border: 1px solid var(--fire-orange); color: var(--fire-orange); border-radius: 10px; padding: 0 16px; font-weight: 700; font-size: 13px; cursor: pointer; white-space: nowrap; }
+    .check-btn { background: var(--card-bg); border: 1px solid var(--fire-orange); color: var(--fire-orange); border-radius: 10px; padding: 0 16px; font-weight: 700; font-size: 13px; cursor: pointer; white-space: nowrap; display: flex; align-items: center; }
     .check-result { margin-top: 10px; font-size: 13px; display: none; align-items: center; gap: 8px; }
     .check-result.show { display: flex; }
     .check-result.ok { color: #00d68f; }
@@ -253,7 +201,7 @@
 
   <!-- SPLASH SCREEN -->
   <div id="splash">
-    <img id="splashLogo" style="display:none;">
+    <img id="splashLogo" style="display:none;" alt="Logo">
     <div id="splashLogoFallback"><i class="fa-solid fa-fire-flame-curved"></i></div>
     <div class="splash-title">FlayPay</div>
     <div class="splash-bar-track"><div class="splash-bar-fill"></div></div>
@@ -291,8 +239,7 @@
       <button class="btn-fire" style="background:#1e1e24;" onclick="openReviewModal()"><i class="fa-solid fa-pen"></i> Fikr qoldirish</button>
     </div>
     <div class="sec-title"><i class="fa-solid fa-comments"></i> Mijozlar fikri</div>
-    <!-- Izohga bosilganda barcha izohlar modal oynasi ochiladi -->
-    <div class="reviews-box" id="reviewsBox" onclick="openAllReviewsModal()"></div>
+    <div class="reviews-box" id="reviewsBox"></div>
   </div>
 
   <!-- PAGE 2: TO'LDIRISH -->
@@ -372,7 +319,7 @@
   <!-- PAGE 4: PROFIL -->
   <div id="p-profil" class="page">
     <div style="text-align:center; padding:20px 0;">
-      <img id="profileAvatarImg" style="width:70px; height:70px; border-radius:50%; margin:0 auto; display:none; object-fit:cover; border:2px solid var(--fire-orange);">
+      <img id="profileAvatarImg" style="width:70px; height:70px; border-radius:50%; margin:0 auto; display:none; object-fit:cover; border:2px solid var(--fire-orange);" alt="Avatar">
       <div id="profileAvatarFallback" style="width:70px; height:70px; background:linear-gradient(45deg, var(--fire-orange), var(--fire-yellow)); border-radius:50%; margin:0 auto; display:flex; align-items:center; justify-content:center; font-size:28px; font-weight:900;">Z</div>
       <h3 style="margin-top:10px;" id="profileName">Mehmon</h3>
       <p style="font-size:12px; color:var(--text-sub);" id="profileHandle"></p>
@@ -459,7 +406,6 @@
     <div class="top-list" id="topList"></div>
   </div>
 
-  <!-- MODAL: FIKR YOZISH -->
   <div id="reviewModal" class="modal">
     <div class="modal-content">
       <h3 style="margin-bottom:6px;">Fikr yozish</h3>
@@ -469,20 +415,6 @@
       </div>
       <textarea id="reviewText" style="width:100%; height:70px; background:#000; border:1px solid var(--card-border); color:#fff; padding:10px; border-radius:10px; outline:none;" placeholder="Xizmat haqida fikringiz..."></textarea>
       <button class="btn-fire" style="width:100%; margin-top:10px;" onclick="submitReview()">Yuborish</button>
-    </div>
-  </div>
-
-  <!-- MODAL: BARCHA IZOHLAR VA REAKSIYALAR -->
-  <div id="allReviewsModal" class="modal">
-    <div class="reviews-modal-content">
-      <div style="display:flex; justify-content:space-between; align-items:center;">
-        <h3 style="font-size:18px;"><i class="fa-solid fa-comments" style="color:var(--fire-orange)"></i> Barcha mijozlar fikri</h3>
-        <div class="circle-btn" onclick="closeModal('allReviewsModal')"><i class="fa-solid fa-xmark"></i></div>
-      </div>
-      <div class="reviews-list-full" id="fullReviewsList"></div>
-      <button class="btn-fire" style="width:100%; margin-top:12px;" onclick="closeModal('allReviewsModal'); openReviewModal();">
-        <i class="fa-solid fa-pen"></i> Fikr qoldirish
-      </button>
     </div>
   </div>
 
@@ -582,7 +514,7 @@
       }
     }
 
-    /* ---------- BANNER RENDER (Video hamda Rasm) ---------- */
+    /* ---------- RENDER ---------- */
     function renderBanners() {
       const c = document.getElementById('bannerContainer');
       c.innerHTML = '';
@@ -591,17 +523,12 @@
       (CONFIG.banners || [null,null,null]).forEach((b, i) => {
         const slide = document.createElement('div');
         slide.className = 'banner-slide' + (i === 0 ? ' active' : '');
-        
-        if (b && (b.type === 'video' || b.video || (b.url && b.url.match(/\.(mp4|webm|ogg)/i)))) {
-          const videoSrc = b.url || b.video;
-          slide.innerHTML = `<video src="${videoSrc}" autoplay loop muted playsinline style="width:100%; height:100%; object-fit:cover; position:absolute; inset:0;"></video>`;
-        } else if (b && (b.image || b.url)) {
-          slide.style.backgroundImage = `url('${b.image || b.url}')`;
+        if (b && b.image) {
+          slide.style.backgroundImage = `url('${b.image}')`;
         } else {
           slide.classList.add('empty');
           slide.innerHTML = `<div class="banner-empty-hint"><i class="fa-solid fa-image"></i>Banner ${i + 1} — admin paneldan qo'shiladi</div>`;
         }
-        
         c.appendChild(slide);
         const dot = document.createElement('div');
         dot.className = 'banner-dot' + (i === 0 ? ' active' : '');
@@ -609,7 +536,6 @@
       });
       c.appendChild(dots);
     }
-
     let bannerIdx = 0;
     function tickBanners() {
       const slides = document.querySelectorAll('.banner-slide');
@@ -636,7 +562,6 @@
       `).join('');
     }
 
-    /* ---------- IZOHLAR VA REAKSIYALAR ---------- */
     function renderReviews() {
       const box = document.getElementById('reviewsBox');
       if (!CONFIG.reviews || !CONFIG.reviews.length) { box.innerHTML = `<div class="empty-hint"><i class="fa-solid fa-comment"></i>Hali fikr yo'q</div>`; return; }
@@ -648,7 +573,6 @@
         </div>
       `).join('');
     }
-
     let revIdx = 0;
     function tickReviews() {
       const slides = document.querySelectorAll('.review-slide');
@@ -656,76 +580,6 @@
       slides[revIdx].classList.remove('active');
       revIdx = (revIdx + 1) % slides.length;
       slides[revIdx].classList.add('active');
-    }
-
-    function openAllReviewsModal() {
-      renderFullReviews();
-      document.getElementById('allReviewsModal').style.display = 'flex';
-    }
-
-    function renderFullReviews() {
-      const list = document.getElementById('fullReviewsList');
-      if (!CONFIG.reviews || !CONFIG.reviews.length) {
-        list.innerHTML = `<div class="empty-hint"><i class="fa-solid fa-comment"></i>Hali fikrlar yo'q</div>`;
-        return;
-      }
-
-      // Reaksiyalarning umumiy soni bo'yicha saralash (Eng ko'p reaksiya yig'ganlar tepada)
-      const sortedReviews = [...CONFIG.reviews].sort((a, b) => {
-        const totalA = Object.values(a.reactions || {}).reduce((sum, arr) => sum + (Array.isArray(arr) ? arr.length : 0), 0);
-        const totalB = Object.values(b.reactions || {}).reduce((sum, arr) => sum + (Array.isArray(arr) ? arr.length : 0), 0);
-        return totalB - totalA;
-      });
-
-      const emojis = ['👍', '❤️', '🔥', '👏'];
-
-      list.innerHTML = sortedReviews.map((r) => {
-        const rId = r.id || r._id;
-        const reactions = r.reactions || {};
-
-        const reactionsHtml = emojis.map(emo => {
-          const userList = reactions[emo] || [];
-          const isReacted = userList.includes(USER_ID);
-          return `
-            <button class="reaction-btn ${isReacted ? 'active' : ''}" onclick="toggleReaction('${rId}', '${emo}')">
-              <span>${emo}</span> <span>${userList.length}</span>
-            </button>
-          `;
-        }).join('');
-
-        return `
-          <div class="review-card-item">
-            <div class="stars">${'<i class="fa-solid fa-star"></i>'.repeat(r.stars)}</div>
-            <div style="font-weight:700; font-size:13px; color:#fff;">${r.name}</div>
-            <div style="font-size:12px; color:var(--text-sub); margin-top:2px;">${r.text}</div>
-            <div class="reactions-bar">${reactionsHtml}</div>
-          </div>
-        `;
-      }).join('');
-    }
-
-    async function toggleReaction(reviewId, emoji) {
-      const review = CONFIG.reviews.find(r => (r.id || r._id) === reviewId);
-      if (!review) return;
-
-      if (!review.reactions) {
-        review.reactions = { '👍': [], '❤️': [], '🔥': [], '👏': [] };
-      }
-      if (!review.reactions[emoji]) review.reactions[emoji] = [];
-
-      const userIdx = review.reactions[emoji].indexOf(USER_ID);
-      if (userIdx > -1) {
-        review.reactions[emoji].splice(userIdx, 1);
-      } else {
-        review.reactions[emoji].push(USER_ID);
-      }
-
-      renderFullReviews();
-
-      await api('/api/reviews/react', {
-        method: 'POST',
-        body: JSON.stringify({ reviewId, emoji, userId: USER_ID })
-      });
     }
 
     function renderTop() {
@@ -860,6 +714,7 @@
       state.currentDepositId = res.deposit ? res.deposit.id : null;
       switchPage('payconfirm');
       
+      // Har 3 sekundda serverdan holatni so'rab turish
       pollDepositStatus();
     }
 
@@ -875,6 +730,7 @@
           clearInterval(pollInterval);
           pollInterval = null;
           
+          // Balansni yangilash
           const u = await api(`/api/user/${USER_ID}`);
           if (u && u.user) state.balance = u.user.balance;
           updateBalanceUI();
@@ -919,7 +775,7 @@
       const grid = document.getElementById('pkgGrid');
       if (!pkgs.length) { grid.innerHTML = `<div style="grid-column:1/-1;" class="empty-hint"><i class="fa-solid fa-box"></i>Bu bo'lim uchun hali paket yo'q</div>`; return; }
       grid.innerHTML = pkgs.map((p, i) => {
-        const iconHtml = p.icon && p.icon.startsWith('/uploads/') ? `<img src="${p.icon}">` : (p.icon || '🪙');
+        const iconHtml = p.icon && p.icon.startsWith('/uploads/') ? `<img src="${p.icon}" alt="Icon">` : (p.icon || '🪙');
         return `
         <div class="pkg-card" data-i="${i}" onclick="selectPkg(${i})">
           <div class="pkg-check"><i class="fa-solid fa-check"></i></div>
