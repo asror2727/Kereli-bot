@@ -7,8 +7,8 @@ const { readDb, updateDb, getUser } = require('./db');
 const uploadsDir = path.join(__dirname, '..', 'uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
-const sessions = new Map(); // admin session (chatId -> {step,data})
-const customerSessions = new Map(); // mijoz sharh yozish session (chatId -> {step,data})
+const sessions = new Map();
+const customerSessions = new Map();
 
 let botUsernameCache = null;
 function getBotUsername() { return botUsernameCache; }
@@ -21,7 +21,7 @@ function initBot() {
   }
 
   const bot = new TelegramBot(token, { polling: true });
-  bot.on('polling_error', (err) => console.error('Polling xatosi (e\'tibor bermasa ham bo\'ladi):', err.message));
+  bot.on('polling_error', (err) => console.error('Polling xatosi:', err.message));
   bot.getMe().then((me) => { botUsernameCache = me.username; }).catch(() => {});
 
   const channel = process.env.CHANNEL_USERNAME || 'arkootzif';
@@ -64,7 +64,7 @@ function initBot() {
   }
 
   // =========================================================
-  // /start — MIJOZLAR UCHUN (2 TA RASMDAGI TUGMALAR BILAN)
+  // /start — FAQAT YANGI MATN VA TUGMALAR
   // =========================================================
   bot.onText(/\/start(?:\s+(.+))?/, async (msg, match) => {
     const chatId = msg.chat.id;
@@ -108,7 +108,7 @@ function initBot() {
   });
 
   // =========================================================
-  // /admin — BOSH MENYU (Siz yuborgan original versiya)
+  // /admin — ADMIN PANEL
   // =========================================================
   bot.onText(/\/admin/, (msg) => {
     if (!isOwner(msg.chat.id)) {
@@ -131,7 +131,7 @@ function initBot() {
   }
 
   // =========================================================
-  // CALLBACK QUERY ROUTER
+  // CALLBACK QUERY HANDLER
   // =========================================================
   bot.on('callback_query', async (query) => {
     const chatId = query.message.chat.id;
@@ -221,15 +221,12 @@ function initBot() {
     });
     if (notifyUserId) {
       if (action === 'confirm') bot.sendMessage(notifyUserId, `✅ To'lovingiz tasdiqlandi! ${amount.toLocaleString('uz-UZ')} so'm balansingizga tushdi.`).catch(() => {});
-      else bot.sendMessage(notifyUserId, `❌ To'lovingiz tasdiqlanmadi. Balki pul hali tushmagandir, birozdan keyin qayta urinib ko'ring yoki @${support} ga yozing.`).catch(() => {});
+      else bot.sendMessage(notifyUserId, `❌ To'lovingiz tasdiqlanmadi. Admin bilan bog'laning: @${support}`).catch(() => {});
     }
     if (text) bot.editMessageText(text, { chat_id: chatId, message_id: msgId }).catch(() => {});
     else bot.editMessageReplyMarkup({ inline_keyboard: [] }, { chat_id: chatId, message_id: msgId }).catch(() => {});
   }
 
-  // =========================================================
-  // BUYURTMA — TASDIQLASH / BEKOR QILISH / BAHO / IZOH
-  // =========================================================
   function handleOrderAction(orderId, action, chatId, msgId) {
     let result = null;
     updateDb((db) => {
@@ -276,9 +273,6 @@ function initBot() {
     });
   }
 
-  // =========================================================
-  // BANNERLAR
-  // =========================================================
   function sendBannersMenu(chatId, msgId) {
     const db = readDb();
     const rows = [0, 1, 2].map((i) => {
@@ -305,7 +299,7 @@ function initBot() {
     }
     if (action === 'update') {
       sessions.set(String(chatId), { step: 'banner_photo', data: { slot } });
-      editOrSend(chatId, msgId, '📸 Banner uchun rasm yuboring (faqat rasm, matn kerak emas):', [cancelRow]);
+      editOrSend(chatId, msgId, '📸 Banner uchun rasm yuboring:', [cancelRow]);
     }
     if (action === 'delete') {
       updateDb((db) => { db.banners[slot] = null; });
@@ -313,9 +307,6 @@ function initBot() {
     }
   }
 
-  // =========================================================
-  // O'YINLAR
-  // =========================================================
   function sendGamesMenu(chatId, msgId) {
     const db = readDb();
     const rows = db.games.map((g) => [{ text: `🎮 ${g.name}`, callback_data: `adm|game|view|${g.id}` }]);
@@ -329,7 +320,7 @@ function initBot() {
     const action = parts[2];
     if (action === 'add') {
       sessions.set(String(chatId), { step: 'game_name', data: {} });
-      editOrSend(chatId, msgId, '✏️ O\'yin nomini yozing (masalan: PUBG Mobile):', [cancelRow]);
+      editOrSend(chatId, msgId, '✏️ O\'yin nomini yozing:', [cancelRow]);
       return;
     }
     const gameId = parts[3];
@@ -355,15 +346,12 @@ function initBot() {
     }
   }
 
-  // =========================================================
-  // PAKETLAR (UC / Prime)
-  // =========================================================
   function handlePkgCallback(parts, chatId, msgId) {
     const action = parts[2];
     if (action === 'add') {
       const gameId = parts[3], type = parts[4];
       sessions.set(String(chatId), { step: 'pkg_icon', data: { gameId, type } });
-      editOrSend(chatId, msgId, `${type === 'uc' ? 'UC' : 'Prime'} paket uchun ikonka yuboring:\n\n— Emoji yozing (masalan 💎)\n— YOKI rasm (PNG/JPG) yuboring`, [cancelRow]);
+      editOrSend(chatId, msgId, `${type === 'uc' ? 'UC' : 'Prime'} paket uchun ikonka yuboring (Emoji yoki Rasm):`, [cancelRow]);
     }
     if (action === 'list') {
       const gameId = parts[3];
@@ -378,7 +366,7 @@ function initBot() {
         });
       });
       rows.push([{ text: '⬅️ Orqaga', callback_data: `adm|game|view|${gameId}` }]);
-      const text = rows.length > 1 ? `📋 *${game.name}* paketlari\n\n(bosilsa o'chadi)` : `📋 *${game.name}*\n\nHali paket yo'q.`;
+      const text = rows.length > 1 ? `📋 *${game.name}* paketlari` : `📋 *${game.name}*\n\nHali paket yo'q.`;
       editOrSend(chatId, msgId, text, rows);
     }
     if (action === 'del') {
@@ -391,9 +379,6 @@ function initBot() {
     }
   }
 
-  // =========================================================
-  // TOP
-  // =========================================================
   function sendTopMenu(chatId, msgId) {
     const db = readDb();
     const text = `🏆 *Top xaridorlar*\n\nHozir ${db.topUsers.length} ta foydalanuvchi bor.`;
@@ -404,13 +389,10 @@ function initBot() {
   function handleTopCallback(parts, chatId, msgId) {
     if (parts[2] === 'edit') {
       sessions.set(String(chatId), { step: 'top_bulk', data: {} });
-      editOrSend(chatId, msgId, '✏️ Har bir qatorga bitta foydalanuvchi, shu formatda yozing:\n\n`Ism | 12 buyurtma | 397 788 UZS`\n\nBir nechta qatorni birdan yuborsangiz bo\'ladi.', [cancelRow]);
+      editOrSend(chatId, msgId, '✏️ Har bir qatorga: `Ism | 12 buyurtma | 397 788 UZS` formatda yozing:', [cancelRow]);
     }
   }
 
-  // =========================================================
-  // TO'LOVLAR
-  // =========================================================
   function sendDepositsMenu(chatId, msgId) {
     const db = readDb();
     const pending = db.deposits.filter((d) => d.status === 'pending').slice(0, 15);
@@ -420,16 +402,13 @@ function initBot() {
     }
     bot.editMessageText(`💰 *To'lovlar* — ${pending.length} ta kutilmoqda:`, { chat_id: chatId, message_id: msgId, parse_mode: 'Markdown' }).catch(() => {});
     pending.forEach((dep) => {
-      bot.sendMessage(chatId, `💰 ${Number(dep.amount).toLocaleString('uz-UZ')} so'm — ${dep.method.toUpperCase()}\nFoydalanuvchi: ${dep.userId}\nVaqt: ${new Date(dep.createdAt).toLocaleString('uz-UZ')}`, {
+      bot.sendMessage(chatId, `💰 ${Number(dep.amount).toLocaleString('uz-UZ')} so'm — ${dep.method.toUpperCase()}\nFoydalanuvchi: ${dep.userId}`, {
         reply_markup: { inline_keyboard: [[{ text: '✅ Tasdiqlash', callback_data: `dep_confirm_${dep.id}` }, { text: '❌ Bekor qilish', callback_data: `dep_reject_${dep.id}` }]] }
       });
     });
     bot.sendMessage(chatId, 'Menyuga qaytish:', { reply_markup: { inline_keyboard: [[{ text: '⬅️ Bosh menyu', callback_data: 'adm|menu|main' }]] } });
   }
 
-  // =========================================================
-  // BUYURTMALAR
-  // =========================================================
   function sendOrdersMenu(chatId, msgId) {
     const db = readDb();
     const pending = db.orders.filter((o) => o.status === 'pending').slice(0, 15);
@@ -444,46 +423,37 @@ function initBot() {
 
   function sendOrderNotification(order) {
     const db = readDb();
-    const text = `📦 Buyurtma #${order.number}\n\n👤 Foydalanuvchi: ${order.userName || 'Nomsiz'}\n🆔 User ID: ${order.userId}\n🎮 O'yin: ${order.gameName}\n📦 Miqdor: ${order.packageLabel}\n🆔 O'yinchi ID: ${order.playerId}\n🕐 Vaqt: ${new Date(order.createdAt).toLocaleString('uz-UZ')}\n💰 Narx: ${Number(order.price).toLocaleString('uz-UZ')} so'm`;
+    const text = `📦 Buyurtma #${order.number}\n\n👤 Foydalanuvchi: ${order.userName || 'Nomsiz'}\n🆔 User ID: ${order.userId}\n🎮 O'yin: ${order.gameName}\n📦 Miqdor: ${order.packageLabel}\n🆔 O'yinchi ID: ${order.playerId}\n💰 Narx: ${Number(order.price).toLocaleString('uz-UZ')} so'm`;
     getAllAdminIds(db).forEach((adminId) => {
       bot.sendMessage(adminId, text, {
         reply_markup: { inline_keyboard: [[{ text: '✅ Tasdiqlash', callback_data: `ord_confirm_${order.id}` }, { text: '❌ Bekor qilish', callback_data: `ord_reject_${order.id}` }]] }
-      }).catch((e) => console.error('Adminga buyurtma xabari yuborilmadi:', e.message));
+      }).catch(() => {});
     });
   }
 
-  // =========================================================
-  // LOGO
-  // =========================================================
   function startLogoFlow(chatId, msgId) {
     sessions.set(String(chatId), { step: 'logo_photo', data: {} });
-    editOrSend(chatId, msgId, '🖼 Yangi logo rasmini yuboring (bot /start xabarida va sayt yuklanish ekranida shu chiqadi):', [cancelRow]);
+    editOrSend(chatId, msgId, '🖼 Yangi logo rasmini yuboring:', [cancelRow]);
   }
 
-  // =========================================================
-  // MUSIQA
-  // =========================================================
   function startMusicFlow(chatId, msgId) {
     sessions.set(String(chatId), { step: 'music_file', data: {} });
-    editOrSend(chatId, msgId, '🎵 Musiqa faylini (audio sifatida) yuboring:', [cancelRow]);
+    editOrSend(chatId, msgId, '🎵 Musiqa audio faylini yuboring:', [cancelRow]);
   }
 
-  // =========================================================
-  // ADMINLAR
-  // =========================================================
   function sendAdminsMenu(chatId, msgId) {
     const db = readDb();
     const rows = (db.admins || []).map((id) => [{ text: `🗑 ${id}`, callback_data: `adm|admins|del|${id}` }]);
     rows.push([{ text: '➕ Admin qo\'shish', callback_data: 'adm|admins|add' }]);
     rows.push([{ text: '⬅️ Orqaga', callback_data: 'adm|menu|main' }]);
-    const text = `👥 *Adminlar*\n\nAsosiy: \`${ownerChatId}\`\nQo'shimcha: ${(db.admins || []).length} ta\n\nYangi admin qo'shish uchun uning Telegram ID'i kerak (masalan @userinfobot orqali olinadi).`;
+    const text = `👥 *Adminlar*\n\nAsosiy: \`${ownerChatId}\``;
     editOrSend(chatId, msgId, text, rows);
   }
 
   function handleAdminsCallback(parts, chatId, msgId) {
     if (parts[2] === 'add') {
       sessions.set(String(chatId), { step: 'admin_add', data: {} });
-      editOrSend(chatId, msgId, '✏️ Yangi adminning Telegram ID raqamini yuboring (faqat raqam):', [cancelRow]);
+      editOrSend(chatId, msgId, '✏️ Yangi adminning Telegram ID raqamini yuboring:', [cancelRow]);
     }
     if (parts[2] === 'del') {
       const id = parts[3];
@@ -493,7 +463,7 @@ function initBot() {
   }
 
   // =========================================================
-  // MATN / RASM / AUDIO XABARLARI
+  // MESSAGE HANDLER
   // =========================================================
   bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
@@ -510,7 +480,6 @@ function initBot() {
     if (!isOwner(chatId)) return;
     const session = sessions.get(String(chatId));
     if (!session) return;
-    if (msg.text === '/cancel') { sessions.delete(String(chatId)); bot.sendMessage(chatId, 'Bekor qilindi.'); sendMainMenu(chatId); return; }
 
     try {
       switch (session.step) {
@@ -519,14 +488,14 @@ function initBot() {
           const image = await downloadTelegramFile(msg.photo[msg.photo.length - 1].file_id);
           updateDb((db) => { db.banners[session.data.slot] = { image }; });
           sessions.delete(String(chatId));
-          bot.sendMessage(chatId, `✅ Banner ${session.data.slot + 1} saqlandi!`);
+          bot.sendMessage(chatId, `✅ Banner saqlandi!`);
           sendMainMenu(chatId);
           break;
         }
         case 'game_name': {
           session.data.name = msg.text || 'O\'yin';
           session.step = 'game_photo';
-          bot.sendMessage(chatId, '📸 Endi o\'yin uchun rasm yuboring:');
+          bot.sendMessage(chatId, '📸 Endi o\'yin rasmini yuboring:');
           break;
         }
         case 'game_photo': {
@@ -546,23 +515,23 @@ function initBot() {
           else return bot.sendMessage(chatId, '❌ Emoji yozing yoki rasm yuboring.');
           session.data.icon = icon;
           session.step = 'pkg_text';
-          bot.sendMessage(chatId, '✏️ Endi nomi va narxini shu formatda yozing:\n\n60 UC-12000\n\n(chapda nomi, o\'ngda narxi, orasida "-")');
+          bot.sendMessage(chatId, '✏️ Nomi va narxini yozing (masalan: 60 UC-12000):');
           break;
         }
         case 'pkg_text': {
           const text = (msg.text || '').trim();
           const idx = text.lastIndexOf('-');
-          if (idx === -1) { bot.sendMessage(chatId, '❌ Format noto\'g\'ri. Masalan: 60 UC-12000'); return; }
+          if (idx === -1) return bot.sendMessage(chatId, '❌ Noto\'g\'ri format. Masalan: 60 UC-12000');
           const amt = text.slice(0, idx).trim();
           const price = parseInt(text.slice(idx + 1).trim().replace(/\s/g, ''), 10);
-          if (!amt || isNaN(price)) { bot.sendMessage(chatId, '❌ Format noto\'g\'ri. Masalan: 60 UC-12000'); return; }
+          if (!amt || isNaN(price)) return bot.sendMessage(chatId, '❌ Noto\'g\'ri format. Masalan: 60 UC-12000');
           const { gameId, type, icon } = session.data;
           updateDb((db) => {
             const game = db.games.find((g) => g.id === gameId);
             if (game) { if (!game.types[type]) game.types[type] = []; game.types[type].push({ icon, amt, price }); }
           });
           sessions.delete(String(chatId));
-          bot.sendMessage(chatId, `✅ Paket qo'shildi: ${amt} — ${price.toLocaleString('uz-UZ')} so'm`);
+          bot.sendMessage(chatId, `✅ Paket qo'shildi!`);
           sendMainMenu(chatId);
           break;
         }
@@ -575,7 +544,7 @@ function initBot() {
           });
           updateDb((db) => { db.topUsers = topUsers; });
           sessions.delete(String(chatId));
-          bot.sendMessage(chatId, `✅ Top ro'yxati saqlandi (${topUsers.length} ta).`);
+          bot.sendMessage(chatId, `✅ Top saqlandi!`);
           sendMainMenu(chatId);
           break;
         }
@@ -590,7 +559,7 @@ function initBot() {
         }
         case 'music_file': {
           const fileObj = msg.audio || msg.voice || (msg.document && /audio|mpeg/.test(msg.document.mime_type || '') ? msg.document : null);
-          if (!fileObj) return bot.sendMessage(chatId, '🎵 Iltimos, audio/mp3 fayl yuboring.');
+          if (!fileObj) return bot.sendMessage(chatId, '🎵 Iltimos, audio fayl yuboring.');
           const url = await downloadTelegramFile(fileObj.file_id);
           updateDb((db) => { db.musicUrl = url; });
           sessions.delete(String(chatId));
@@ -600,18 +569,16 @@ function initBot() {
         }
         case 'admin_add': {
           const id = (msg.text || '').trim();
-          if (!/^\d+$/.test(id)) { bot.sendMessage(chatId, '❌ Faqat raqam yuboring (Telegram ID).'); return; }
+          if (!/^\d+$/.test(id)) return bot.sendMessage(chatId, '❌ Faqat raqam yuboring.');
           updateDb((db) => { if (!db.admins) db.admins = []; if (!db.admins.includes(id)) db.admins.push(id); });
           sessions.delete(String(chatId));
           bot.sendMessage(chatId, `✅ Admin qo'shildi: ${id}`);
-          bot.sendMessage(id, '👑 Siz FlayPay administratori etib tayinlandingiz. Boshqarish uchun /admin yozing.').catch(() => {});
           sendMainMenu(chatId);
           break;
         }
       }
     } catch (e) {
-      console.error('Admin session xatosi:', e.message);
-      bot.sendMessage(chatId, '❌ Xatolik yuz berdi, qaytadan urinib ko\'ring yoki /admin bilan qaytadan boshlang.');
+      console.error('Session xatosi:', e.message);
       sessions.delete(String(chatId));
     }
   });
@@ -629,15 +596,15 @@ function initBot() {
 
   function sendDepositNotification(deposit) {
     const db = readDb();
-    const text = `💰 Yangi to'lov so'rovi\n\nFoydalanuvchi: ${deposit.userId}\nSumma: ${deposit.amount.toLocaleString('uz-UZ')} so'm\nUsul: ${deposit.method.toUpperCase()}\nVaqt: ${new Date(deposit.createdAt).toLocaleString('uz-UZ')}`;
+    const text = `💰 Yangi to'lov so'rovi\n\nFoydalanuvchi: ${deposit.userId}\nSumma: ${deposit.amount.toLocaleString('uz-UZ')} so'm`;
     getAllAdminIds(db).forEach((adminId) => {
       bot.sendMessage(adminId, text, {
         reply_markup: { inline_keyboard: [[{ text: '✅ Tasdiqlash', callback_data: `dep_confirm_${deposit.id}` }, { text: '❌ Bekor qilish', callback_data: `dep_reject_${deposit.id}` }]] }
-      }).catch((e) => console.error('Adminga to\'lov xabari yuborilmadi:', e.message));
+      }).catch(() => {});
     });
   }
 
-  console.log('🤖 Telegram bot ishga tushdi (polling) — admin panel botning o\'zida ishlaydi.');
+  console.log('🤖 Telegram bot ishga tushdi.');
   bot._sendOrderNotification = sendOrderNotification;
   bot._sendDepositNotification = sendDepositNotification;
   return bot;
