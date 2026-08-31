@@ -2,7 +2,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
-const { readDb, updateDb, getUser, nextOrderNumber } = require('./db');
+const { readDb, updateDb, getUser } = require('./db');
 
 const uploadsDir = path.join(__dirname, '..', 'uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
@@ -34,6 +34,7 @@ function initBot() {
     const db = readDb();
     return (db.admins || []).includes(String(chatId));
   }
+
   function getAllAdminIds(db) {
     const set = new Set([String(ownerChatId), ...(db.admins || [])]);
     set.delete('undefined');
@@ -63,7 +64,7 @@ function initBot() {
   }
 
   // =========================================================
-  // /start — mijozlar uchun
+  // /start — MIJOZLAR UCHUN (2 TA RASMDAGI TUGMALAR BILAN)
   // =========================================================
   bot.onText(/\/start(?:\s+(.+))?/, async (msg, match) => {
     const chatId = msg.chat.id;
@@ -107,7 +108,7 @@ function initBot() {
   });
 
   // =========================================================
-  // /admin — bosh menyu
+  // /admin — BOSH MENYU (Siz yuborgan original versiya)
   // =========================================================
   bot.onText(/\/admin/, (msg) => {
     if (!isOwner(msg.chat.id)) {
@@ -227,7 +228,7 @@ function initBot() {
   }
 
   // =========================================================
-  // BUYURTMA — tasdiqlash / bekor qilish / baho / izoh
+  // BUYURTMA — TASDIQLASH / BEKOR QILISH / BAHO / IZOH
   // =========================================================
   function handleOrderAction(orderId, action, chatId, msgId) {
     let result = null;
@@ -287,6 +288,7 @@ function initBot() {
     rows.push([{ text: '⬅️ Orqaga', callback_data: 'adm|menu|main' }]);
     editOrSend(chatId, msgId, '🖼 *Bannerlar* (3 ta slot)\n\nSlotni tanlang:', rows);
   }
+
   function handleBannerCallback(parts, chatId, msgId) {
     const action = parts[2];
     const slot = Number(parts[3]);
@@ -322,6 +324,7 @@ function initBot() {
     const text = db.games.length ? '🎮 *O\'yinlar*' : '🎮 *O\'yinlar*\n\nHali o\'yin qo\'shilmagan.';
     editOrSend(chatId, msgId, text, rows);
   }
+
   function handleGameCallback(parts, chatId, msgId) {
     const action = parts[2];
     if (action === 'add') {
@@ -397,6 +400,7 @@ function initBot() {
     const rows = [[{ text: '✏️ Ro\'yxatni tahrirlash', callback_data: 'adm|top|edit' }], [{ text: '⬅️ Orqaga', callback_data: 'adm|menu|main' }]];
     editOrSend(chatId, msgId, text, rows);
   }
+
   function handleTopCallback(parts, chatId, msgId) {
     if (parts[2] === 'edit') {
       sessions.set(String(chatId), { step: 'top_bulk', data: {} });
@@ -424,7 +428,7 @@ function initBot() {
   }
 
   // =========================================================
-  // BUYURTMALAR (kutilayotganlarni qayta ko'rsatish)
+  // BUYURTMALAR
   // =========================================================
   function sendOrdersMenu(chatId, msgId) {
     const db = readDb();
@@ -475,6 +479,7 @@ function initBot() {
     const text = `👥 *Adminlar*\n\nAsosiy: \`${ownerChatId}\`\nQo'shimcha: ${(db.admins || []).length} ta\n\nYangi admin qo'shish uchun uning Telegram ID'i kerak (masalan @userinfobot orqali olinadi).`;
     editOrSend(chatId, msgId, text, rows);
   }
+
   function handleAdminsCallback(parts, chatId, msgId) {
     if (parts[2] === 'add') {
       sessions.set(String(chatId), { step: 'admin_add', data: {} });
@@ -633,8 +638,8 @@ function initBot() {
   }
 
   console.log('🤖 Telegram bot ishga tushdi (polling) — admin panel botning o\'zida ishlaydi.');
-  bot._sendOrderNotification = sendOrderNotification; // server.js dan chaqirish uchun
-  bot._sendDepositNotification = sendDepositNotification; // server.js dan chaqirish uchun
+  bot._sendOrderNotification = sendOrderNotification;
+  bot._sendDepositNotification = sendDepositNotification;
   return bot;
 }
 
