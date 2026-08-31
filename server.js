@@ -2,6 +2,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const cors = require('cors');
+const multer = require('multer');
 const TelegramBot = require('node-telegram-bot-api');
 
 const app = express();
@@ -9,16 +10,30 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cors());
 
+// Statik fayllar va upload papkasi
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
 app.use(express.static(path.join(__dirname, 'public')));
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads', express.static(uploadsDir));
+
+// Multer sozlamasi (fayl/rasm yuklash uchun)
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadsDir),
+  filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname)
+});
+const upload = multer({ storage });
 
 const DB_FILE = path.join(__dirname, 'db.json');
 
+// O'zgaruvchilar
 const BOT_TOKEN = process.env.BOT_TOKEN || 'YOUR_BOT_TOKEN_HERE';
 const ADMIN_ID = process.env.ADMIN_ID || '123456789';
 
 const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 
+// Bazani o'qish va yozish
 function readDb() {
   if (!fs.existsSync(DB_FILE)) {
     const initData = {
@@ -37,8 +52,9 @@ function writeDb(data) {
   fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
 }
 
-// API ENDPOINTS
+// ------------------- API ENDPOINTS -------------------
 
+// Config va User ma'lumotlari
 app.get('/api/config', (req, res) => {
   const db = readDb();
   res.json(db.config);
@@ -54,6 +70,7 @@ app.get('/api/user/:id', (req, res) => {
   res.json({ user: db.users[userId] });
 });
 
+// Depozit yaratish va holatini tekshirish
 app.post('/api/deposits', (req, res) => {
   const { userId, amount, method } = req.body;
   const db = readDb();
@@ -148,6 +165,7 @@ app.post('/api/sms-receiver', (req, res) => {
   }
 });
 
+// Buyurtmalar va Sharhlar
 app.post('/api/orders', (req, res) => {
   const { userId, gameId, type, packageIndex, playerId } = req.body;
   const db = readDb();
@@ -217,6 +235,51 @@ app.post('/api/reviews', (req, res) => {
   res.json({ review: newReview });
 });
 
+// ------------------- ADMIN PANEL API ENDPOINTS -------------------
+
+app.post('/api/admin/config', upload.single('splashLogo'), (req, res) => {
+  const db = readDb();
+  if (req.file) {
+    db.config.splashLogo = '/uploads/' + req.file.filename;
+  }
+  if (req.body.config) {
+    try {
+      const parsed = JSON.parse(req.body.config);
+      db.config = { ...db.config, ...parsed };
+    } catch (e) {}
+  }
+  writeDb(db);
+  res.json({ ok: true, config: db.config });
+});
+
+app.post('/api/admin/banner', upload.single('banner'), (req, res) => {
+  const index = parseInt(req.body.index, 10);
+  const db = readDb();
+  if (req.file && index >= 0 && index < 3) {
+    db.config.banners[index] = '/uploads/' + req.file.filename;
+    writeDb(db);
+  }
+  res.json({ ok: true, banners: db.config.banners });
+});
+
+// ------------------- TELEGRAM BOT HANDLERS -------------------
+
+bot.onText(/\/start/, (msg) => {
+  const chatId = msg.chat.id;
+  bot.sendMessage(
+    chatId,
+    `Xush kelibsiz! O'yinlarga valyuta va paketlarni xarid qilish uchun quyidagi tugmani bosing:`,
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "🚀 Mini App-ni ochish", web_app: { url: "https://flaypay.uz" } }]
+        ]
+      }
+    }
+  );
+});
+
+// SERVERNI ISHGA TUSHIRISH
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log(`✅ Server ${PORT}-portda ishga tushdi`);
