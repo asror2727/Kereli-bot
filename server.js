@@ -2,7 +2,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const cors = require('cors');
-const Telegraf = require('telegraf');
+const TelegramBot = require('node-telegram-bot-api');
 
 const app = express();
 app.use(express.json());
@@ -14,12 +14,11 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 const DB_FILE = path.join(__dirname, 'db.json');
 
-// O'zgaruvchilarni sozlang (Render Environment'dan oladi yoki standart beriladi)
 const BOT_TOKEN = process.env.BOT_TOKEN || 'YOUR_BOT_TOKEN_HERE';
-const ADMIN_ID = process.env.ADMIN_ID || '123456789'; 
-const bot = new Telegraf(BOT_TOKEN);
+const ADMIN_ID = process.env.ADMIN_ID || '123456789';
 
-// Bazani o'qish va yozish funksiyalari
+const bot = new TelegramBot(BOT_TOKEN, { polling: true });
+
 function readDb() {
   if (!fs.existsSync(DB_FILE)) {
     const initData = {
@@ -55,7 +54,6 @@ app.get('/api/user/:id', (req, res) => {
   res.json({ user: db.users[userId] });
 });
 
-// Yangi depozit yaratish
 app.post('/api/deposits', (req, res) => {
   const { userId, amount, method } = req.body;
   const db = readDb();
@@ -76,7 +74,6 @@ app.post('/api/deposits', (req, res) => {
   res.json({ ok: true, deposit });
 });
 
-// Depozit holatini tezkor tekshirish (Frontend interval uchun)
 app.get('/api/deposits/:id', (req, res) => {
   const db = readDb();
   const dep = db.deposits.find(d => d.id === req.params.id);
@@ -84,20 +81,18 @@ app.get('/api/deposits/:id', (req, res) => {
   res.json({ ok: true, deposit: dep });
 });
 
-// SMS RECEIVER - AVTO TO'LOV TEZKOR VA FILTRLANGAN
+// SMS RECEIVER - AVTO-TO'LOV
 app.post('/api/sms-receiver', (req, res) => {
   try {
     const bodyText = req.body.message || JSON.stringify(req.body);
     console.log('[SMS RAW KELDI]:', bodyText);
 
-    // 1. Kirish/O'tkazma OTP kodlarini o'tkazib yuborish (Filtr)
     const lowerText = bodyText.toLowerCase();
     if (lowerText.includes('kod') || lowerText.includes('code') || lowerText.includes('o\'tkazilmoqda') || lowerText.includes('otkazilmoqda')) {
       console.log('⚠️ [SMS IGNORED] Bu OTP tasdiqlash kodi.');
       return res.status(200).json({ success: false, message: 'OTP Ignored' });
     }
 
-    // 2. Summani aniqlash
     const amountMatches = bodyText.match(/(\d[\d\s\.]{2,}\d)\s*(sum|so'm|uzs)?/i);
     let amount = 0;
 
@@ -111,8 +106,6 @@ app.post('/api/sms-receiver', (req, res) => {
     }
 
     const db = readDb();
-    
-    // Bazadan kutilayotgan mos depozitni topish
     let depIndex = db.deposits.findIndex(d => d.status === 'pending' && Number(d.amount) === amount);
 
     if (depIndex === -1) {
@@ -128,27 +121,22 @@ app.post('/api/sms-receiver', (req, res) => {
       db.users[dep.userId] = { id: dep.userId, balance: 0, refCount: 0, refEarned: 0 };
     }
 
-    // Balansni oshirish
     db.users[dep.userId].balance += amount;
     writeDb(db);
 
     console.log(`✅ [SMS AUTO] Depozit tasdiqlandi: User ${dep.userId} -> ${amount} so'm`);
 
-    // A) FOYDALANUVCHIGA BILDIRISHNOMA
-    bot.telegram.sendMessage(
+    // Userga xabar
+    bot.sendMessage(
       dep.userId,
-      `✅ **To'lovingiz tasdiqlandi!**\n\n💰 Summa: ${amount.toLocaleString('uz-UZ')} so'm\nBalansingiz muvaffaqiyatli to'ldirildi!`,
+      `✅ *To'lovingiz tasdiqlandi!*\n\n💰 Summa: ${amount.toLocaleString('uz-UZ')} so'm\nBalansingizga qo'shildi.`,
       { parse_mode: 'Markdown' }
     ).catch(err => console.error("User xabar xatosi:", err));
 
-    // B) ADMINGA TEZKOR BILDIRISHNOMA
-    bot.telegram.sendMessage(
+    // Adminga xabar
+    bot.sendMessage(
       ADMIN_ID,
-      `⚡ **AVTO-TO'LOV TASHDIQLANDI!**\n\n` +
-      `👤 **User ID:** \`${dep.userId}\`\n` +
-      `💵 **Summa:** ${amount.toLocaleString('uz-UZ')} so'm\n` +
-      `🆔 **Depozit ID:** \`${dep.id}\`\n` +
-      ` Status: Bazaga qo'shildi`,
+      `⚡ *AVTO-TO'LOV TASDIQLANDI*\n\n👤 *User ID:* \`${dep.userId}\`\n💵 *Summa:* ${amount.toLocaleString('uz-UZ')} so'm\n🆔 *Depozit ID:* \`${dep.id}\`\n Status: Bazaga qo'shildi`,
       { parse_mode: 'Markdown' }
     ).catch(err => console.error("Admin xabar xatosi:", err));
 
@@ -160,7 +148,6 @@ app.post('/api/sms-receiver', (req, res) => {
   }
 });
 
-// BUYURTMA YARATISH
 app.post('/api/orders', (req, res) => {
   const { userId, gameId, type, packageIndex, playerId } = req.body;
   const db = readDb();
@@ -195,9 +182,9 @@ app.post('/api/orders', (req, res) => {
   db.orders.unshift(order);
   writeDb(db);
 
-  bot.telegram.sendMessage(
+  bot.sendMessage(
     ADMIN_ID,
-    `📥 **Yangi buyurtma!**\n\nO'yin: ${game.name}\nPaket: ${pkg.amt}\nNarxi: ${pkg.price} so'm\nPlayer ID: \`${playerId}\`\nUser: ${userId}`,
+    `📥 *Yangi buyurtma!*\n\nO'yin: ${game.name}\nPaket: ${pkg.amt}\nNarxi: ${pkg.price} so'm\nPlayer ID: \`${playerId}\`\nUser: ${userId}`,
     { parse_mode: 'Markdown' }
   ).catch(() => {});
 
@@ -230,9 +217,7 @@ app.post('/api/reviews', (req, res) => {
   res.json({ review: newReview });
 });
 
-// SERVERNI ISHGA TUSHIRISH
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log(`✅ Server ${PORT}-portda ishga tushdi`);
-  bot.launch().then(() => console.log('🤖 Telegram Bot faollashtirildi')).catch(() => {});
 });
