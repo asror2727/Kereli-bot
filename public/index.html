@@ -19,7 +19,6 @@
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
     body { background-color: var(--bg-color); color: var(--text-main); padding-bottom: 85px; overflow-x: hidden; }
 
-    /* ===== SPLASH SCREEN ===== */
     #splash {
       position: fixed; inset: 0; z-index: 9999;
       background: radial-gradient(circle at 50% 40%, #1a1210 0%, #0b0b0e 70%);
@@ -27,26 +26,10 @@
       transition: opacity .5s ease, visibility .5s ease;
     }
     #splash.hide { opacity: 0; visibility: hidden; pointer-events: none; }
-    #splashLogo {
-      width: 84px; height: 84px; border-radius: 22px;
-      object-fit: cover;
-      box-shadow: 0 0 30px rgba(255,69,0,0.4);
-      animation: pulseLogo 1.4s ease-in-out infinite;
-    }
-    #splashLogoFallback {
-      width: 84px; height: 84px; border-radius: 22px;
-      display: flex; align-items: center; justify-content: center;
-      background: linear-gradient(135deg, var(--fire-orange), var(--fire-yellow));
-      font-size: 34px;
-      box-shadow: 0 0 30px rgba(255,69,0,0.4);
-      animation: pulseLogo 1.4s ease-in-out infinite;
-    }
+    #splashLogo { width: 84px; height: 84px; border-radius: 22px; object-fit: cover; box-shadow: 0 0 30px rgba(255,69,0,0.4); animation: pulseLogo 1.4s ease-in-out infinite; }
+    #splashLogoFallback { width: 84px; height: 84px; border-radius: 22px; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, var(--fire-orange), var(--fire-yellow)); font-size: 34px; box-shadow: 0 0 30px rgba(255,69,0,0.4); animation: pulseLogo 1.4s ease-in-out infinite; }
     @keyframes pulseLogo { 0%,100% { transform: scale(1); } 50% { transform: scale(1.08); } }
-    .splash-title {
-      margin-top: 18px; font-size: 20px; font-weight: 900;
-      background: linear-gradient(45deg, var(--fire-orange), var(--fire-yellow));
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-    }
+    .splash-title { margin-top: 18px; font-size: 20px; font-weight: 900; background: linear-gradient(45deg, var(--fire-orange), var(--fire-yellow)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
     .splash-bar-track { width: 140px; height: 4px; border-radius: 4px; background: rgba(255,255,255,0.08); margin-top: 18px; overflow: hidden; }
     .splash-bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--fire-yellow), var(--fire-orange)); animation: loadBar 1.1s ease forwards; }
     @keyframes loadBar { to { width: 100%; } }
@@ -79,30 +62,14 @@
     .banner-dots { position: absolute; bottom: 8px; right: 12px; display: flex; gap: 5px; z-index: 2; }
     .banner-dot { width: 5px; height: 5px; border-radius: 50%; background: rgba(255,255,255,0.35); }
     .banner-dot.active { background: var(--fire-orange); width: 14px; border-radius: 3px; }
-    .banner-text { background: rgba(0, 0, 0, 0.65); backdrop-filter: blur(6px); padding: 8px 12px; border-radius: 10px; border-left: 3px solid var(--fire-orange); }
 
     .sec-title { font-size: 17px; font-weight: 800; margin: 18px 0 12px; display: flex; align-items: center; gap: 8px; }
     .sec-title i { color: var(--fire-orange); }
     .games-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    .game-item {
-      position: relative;
-      border-radius: 18px;
-      overflow: hidden;
-      cursor: pointer;
-      height: 130px;
-      background: var(--card-bg);
-      border: 1px solid rgba(255,255,255,0.06);
-    }
+    .game-item { position: relative; border-radius: 18px; overflow: hidden; cursor: pointer; height: 130px; background: var(--card-bg); border: 1px solid rgba(255,255,255,0.06); }
     .game-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
-    .game-item::after {
-      content: '';
-      position: absolute; inset: 0;
-      background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.1) 55%, transparent 100%);
-    }
-    .game-item .game-item-title {
-      position: absolute; left: 12px; bottom: 10px; z-index: 2;
-      font-weight: 800; font-size: 14px; text-shadow: 0 2px 6px rgba(0,0,0,0.6);
-    }
+    .game-item::after { content: ''; position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.1) 55%, transparent 100%); }
+    .game-item .game-item-title { position: absolute; left: 12px; bottom: 10px; z-index: 2; font-weight: 800; font-size: 14px; text-shadow: 0 2px 6px rgba(0,0,0,0.6); }
 
     .reviews-box { background: var(--card-bg); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 16px; padding: 14px; margin-top: 10px; min-height: 60px; }
     .review-slide { display: none; animation: fadeIn 0.4s ease; }
@@ -156,7 +123,7 @@
     .check-box { background: var(--card-bg); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 14px; margin: 14px 0; }
     .check-row { display: flex; gap: 8px; }
     .check-input { flex: 1; background: #000; border: 1px solid var(--card-border); border-radius: 10px; padding: 12px; color: #fff; font-size: 14px; outline: none; }
-    .check-btn { background: var(--card-bg); border: 1px solid var(--fire-orange); color: var(--fire-orange); border-radius: 10px; padding: 0 16px; font-weight: 700; font-size: 13px; cursor: pointer; white-space: nowrap; display: flex; align-items: center; }
+    .check-btn { background: var(--card-bg); border: 1px solid var(--fire-orange); color: var(--fire-orange); border-radius: 10px; padding: 0 16px; font-weight: 700; font-size: 13px; cursor: pointer; white-space: nowrap; display:flex; align-items:center; }
     .check-result { margin-top: 10px; font-size: 13px; display: none; align-items: center; gap: 8px; }
     .check-result.show { display: flex; }
     .check-result.ok { color: #00d68f; }
@@ -164,15 +131,12 @@
 
     .pkg-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
     .pkg-card { background: var(--card-bg); border: 2px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 16px 12px; text-align: center; cursor: pointer; position: relative; transition: all 0.3s ease; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
-    .pkg-card:hover { border-color: var(--fire-yellow); transform: translateY(-6px); background: rgba(255,165,0,0.08); box-shadow: 0 8px 20px rgba(255,69,0,0.2); }
-    .pkg-card.selected { border-color: var(--fire-orange); background: rgba(255,69,0,0.15); box-shadow: 0 0 20px rgba(255,69,0,0.3); }
-    .pkg-card.sel { border-color: var(--fire-orange); background: rgba(255,69,0,0.08); }
+    .pkg-card.sel { border-color: var(--fire-orange); background: rgba(255,69,0,0.15); box-shadow: 0 0 20px rgba(255,69,0,0.3); }
     .pkg-card .pkg-icon { font-size: 28px; margin-bottom: 8px; }
     .pkg-card .pkg-icon img { width: 40px; height: 40px; object-fit: contain; margin: 0 auto; display: block; }
     .pkg-card .pkg-amt { font-weight: 800; font-size: 18px; color: #fff; margin-bottom: 4px; }
     .pkg-card .pkg-price { font-size: 14px; color: var(--fire-yellow); font-weight: 700; margin-top: 4px; }
-    .pkg-card.sel .pkg-price { color: #ffa500; }
-    .pkg-check { position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; border-radius: 50%; background: linear-gradient(135deg, var(--fire-yellow), var(--fire-orange)); color: #000; font-size: 14px; font-weight: bold; display: none; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(255,69,0,0.4); }
+    .pkg-check { position: absolute; top: 8px; right: 8px; width: 24px; height: 24px; border-radius: 50%; background: linear-gradient(135deg, var(--fire-yellow), var(--fire-orange)); color: #000; font-size: 12px; font-weight: bold; display: none; align-items: center; justify-content: center; }
     .pkg-card.sel .pkg-check { display: flex; }
     .buy-bar { position: sticky; bottom: 0; background: rgba(12,12,16,0.95); backdrop-filter: blur(15px); padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid rgba(255,255,255,0.06); margin: 16px -16px -16px; }
 
@@ -199,9 +163,8 @@
 </head>
 <body>
 
-  <!-- SPLASH SCREEN -->
   <div id="splash">
-    <img id="splashLogo" style="display:none;" alt="Logo">
+    <img id="splashLogo" style="display:none;">
     <div id="splashLogoFallback"><i class="fa-solid fa-fire-flame-curved"></i></div>
     <div class="splash-title">FlayPay</div>
     <div class="splash-bar-track"><div class="splash-bar-fill"></div></div>
@@ -260,8 +223,8 @@
     <div class="steps-box">
       <div style="font-weight:700; font-size:13px; margin-bottom:10px;">TO'LDIRISH BOSQICHLARI</div>
       <div class="step-item"><div class="step-num">1</div> To'lov usuli va summani tanlang</div>
-      <div class="step-item"><div class="step-num">2</div> Ko'rsatilgan kartaga AYNAN shu summani, 3 daqiqa ichida, BIR MARTA o'tkazing</div>
-      <div class="step-item"><div class="step-num">3</div> "To'lov qildim" tugmasini bosing — avtomatik yoki admin tekshirib tasdiqlaydi</div>
+      <div class="step-item"><div class="step-num">2</div> Kartaga AYNAN kiritilgan summani o'tkazing</div>
+      <div class="step-item"><div class="step-num">3</div> "To'lov qildim" tugmasini bosing — avto-tekshiriladi</div>
     </div>
     <button class="btn-fire" style="width:100%; margin-top:16px;" onclick="goStep2()">Davom etish</button>
   </div>
@@ -270,11 +233,11 @@
     <div class="sec-title" style="margin-top:0; cursor:pointer;" onclick="switchPage('toldirish')"><i class="fa-solid fa-arrow-left"></i> Orqaga</div>
     <div id="payActiveBlock">
       <div style="background:#221310; border:1px solid var(--fire-orange); padding:12px; border-radius:12px; font-size:12px; color:#ffaa88;">
-        <b>⚠️ Faqat BIR o'tkazma:</b> Aynan <span id="payAmtLabel">50 000</span> so'mni BIR MARTA yuboring.
+        <b>⚠️ Muhim:</b> Kartaga <span id="payAmtLabel">50 000</span> so'mni to'g'ri o'tkazing va tugmani bosing.
       </div>
       <div class="pay-timer">
         <i class="fa-solid fa-fire-flame-curved"></i>
-        <div><div class="t-val" id="timerVal">03:00</div><div class="t-lbl">to'lov uchun vaqt</div></div>
+        <div><div class="t-val" id="timerVal">03:00</div><div class="t-lbl">vaqt qoldi</div></div>
         <div class="timer-bar-track"><div class="timer-bar-fill" id="timerBar"></div></div>
       </div>
       <div class="copy-box">
@@ -291,22 +254,25 @@
       <div class="pay-expired">
         <i class="fa-solid fa-hourglass-end"></i>
         <div style="font-weight:800; font-size:16px; margin-bottom:6px;">Vaqt tugadi</div>
-        <div style="font-size:13px; color:var(--text-sub); margin-bottom:18px;">To'lov bekor qilindi. Qayta urinib ko'ring.</div>
+        <div style="font-size:13px; color:var(--text-sub); margin-bottom:18px;">Vaqt tugadi. Qayta urinib ko'ring.</div>
         <button class="btn-fire" style="width:100%;" onclick="switchPage('toldirish')">Qayta urinish</button>
       </div>
     </div>
   </div>
 
+  <!-- AVTO TEKSHIRUV SAHIFASI -->
   <div id="p-payconfirm" class="page">
-    <div style="text-align:center; padding:60px 10px;">
-      <i class="fa-solid fa-clock" style="font-size:40px; color:var(--fire-yellow); margin-bottom:14px;"></i>
-      <div style="font-weight:800; font-size:16px; margin-bottom:8px;">To'lovingiz tekshirilmoqda</div>
-      <div style="font-size:13px; color:var(--text-sub); line-height:1.6;">
-        Tizim yoki admin to'lovni tasdiqlagach balansingiz avtomatik to'ldiriladi va Telegram botdan xabar keladi.<br><br>
-        Agar 10 daqiqadan ko'p vaqt o'tsa va pul tushmagan bo'lsa,<br>
-        <a href="#" id="supportLinkConfirm" style="color:var(--fire-orange); font-weight:700;" onclick="openSupport()">Support</a> ga yozing.
+    <div style="text-align:center; padding:50px 10px;">
+      <i class="fa-solid fa-spinner fa-spin" style="font-size:48px; color:var(--fire-orange); margin-bottom:18px;"></i>
+      <div style="font-weight:800; font-size:18px; margin-bottom:8px;">To'lov avto-tekshirilmoqda</div>
+      <div style="font-size:13px; color:var(--text-sub); line-height:1.6; max-width:300px; margin:0 auto;">
+        Bankdan tasdiqlash xabari kelishi kutilmoqda. Biroz kuting, balansingiz avtomatik to'ldiriladi.
       </div>
-      <button class="btn-fire" style="margin-top:24px;" onclick="switchPage('asosiy')">Bosh sahifaga</button>
+      <div style="margin-top:25px;">
+        <button class="btn-fire" style="background:#1f1412; border:1px solid var(--fire-orange);" onclick="manualCheckNow()">
+          <i class="fa-solid fa-rotate-right"></i> Qayta tekshirish
+        </button>
+      </div>
     </div>
   </div>
 
@@ -319,7 +285,7 @@
   <!-- PAGE 4: PROFIL -->
   <div id="p-profil" class="page">
     <div style="text-align:center; padding:20px 0;">
-      <img id="profileAvatarImg" style="width:70px; height:70px; border-radius:50%; margin:0 auto; display:none; object-fit:cover; border:2px solid var(--fire-orange);" alt="Avatar">
+      <img id="profileAvatarImg" style="width:70px; height:70px; border-radius:50%; margin:0 auto; display:none; object-fit:cover; border:2px solid var(--fire-orange);">
       <div id="profileAvatarFallback" style="width:70px; height:70px; background:linear-gradient(45deg, var(--fire-orange), var(--fire-yellow)); border-radius:50%; margin:0 auto; display:flex; align-items:center; justify-content:center; font-size:28px; font-weight:900;">Z</div>
       <h3 style="margin-top:10px;" id="profileName">Mehmon</h3>
       <p style="font-size:12px; color:var(--text-sub);" id="profileHandle"></p>
@@ -340,7 +306,6 @@
       <div style="font-weight:800; font-size:16px; margin-bottom:6px;">Do'stingizni taklif qiling</div>
       <div style="font-size:13px; color:var(--text-sub); line-height:1.6;">
         Havolangizni do'stingizga yuboring — u botga kirsa sizga <b style="color:var(--fire-yellow);">200 so'm</b> tushadi.
-        Do'stingiz xarid qilsa, xaridning <b style="color:var(--fire-yellow);">2%</b> hisobingizga avtomatik qo'shiladi.
       </div>
     </div>
     <div class="copy-box">
@@ -361,10 +326,6 @@
     <div class="game-hero" id="gameHero">
       <div class="game-hero-top">
         <div class="circle-btn" onclick="switchPage('asosiy')"><i class="fa-solid fa-arrow-left"></i></div>
-        <div style="display:flex; gap:8px;">
-          <div class="circle-btn"><i class="fa-solid fa-chevron-down"></i></div>
-          <div class="circle-btn"><i class="fa-solid fa-ellipsis-vertical"></i></div>
-        </div>
       </div>
       <div class="game-hero-info">
         <h2 id="gameTitle">—</h2>
@@ -377,8 +338,8 @@
     </div>
     <div class="gamebody">
       <div class="check-box">
-        <div style="font-size:11px; color:var(--fire-yellow); margin-bottom:8px; line-height:1.5;"><i class="fa-solid fa-triangle-exclamation"></i> ID/nikni diqqat bilan tekshiring va ishonch hosil qiling. Noto'g'ri ID kiritilsa, admin javobgar emas.</div>
-        <div style="font-size:12px; color:var(--text-sub); margin-bottom:8px;">O'yin ID raqamingizni kiriting</div>
+        <div style="font-size:11px; color:var(--fire-yellow); margin-bottom:8px; line-height:1.5;"><i class="fa-solid fa-triangle-exclamation"></i> ID ni to'g'ri kiriting. Noto'g'ri ID uchun qayta to'lov qilinmaydi.</div>
+        <div style="font-size:12px; color:var(--text-sub); margin-bottom:8px;">O'yin ID raqami</div>
         <div class="check-row">
           <input type="text" class="check-input" id="playerIdInput" placeholder="Masalan: 51482284">
           <div class="check-btn" onclick="checkPlayerId()">Tekshirish</div>
@@ -397,11 +358,9 @@
   <div id="p-top" class="page no-pad">
     <div class="top-header">
       <div class="circle-btn" onclick="switchPage('asosiy')"><i class="fa-solid fa-xmark"></i></div>
-      <div style="font-size:12px; color:var(--text-sub);">Yopish</div>
     </div>
     <div class="top-title-row">
       <h2>TOP Xaridorlar</h2>
-      <div class="top-filter">Umumiy <i class="fa-solid fa-chevron-down" style="font-size:10px;"></i></div>
     </div>
     <div class="top-list" id="topList"></div>
   </div>
@@ -409,11 +368,10 @@
   <div id="reviewModal" class="modal">
     <div class="modal-content">
       <h3 style="margin-bottom:6px;">Fikr yozish</h3>
-      <div style="font-size:12px; color:var(--text-sub);">Xizmatimizni baholang</div>
       <div class="star-rate" id="starRate">
         <i class="fa-solid fa-star" data-v="1"></i><i class="fa-solid fa-star" data-v="2"></i><i class="fa-solid fa-star" data-v="3"></i><i class="fa-solid fa-star" data-v="4"></i><i class="fa-solid fa-star" data-v="5"></i>
       </div>
-      <textarea id="reviewText" style="width:100%; height:70px; background:#000; border:1px solid var(--card-border); color:#fff; padding:10px; border-radius:10px; outline:none;" placeholder="Xizmat haqida fikringiz..."></textarea>
+      <textarea id="reviewText" style="width:100%; height:70px; background:#000; border:1px solid var(--card-border); color:#fff; padding:10px; border-radius:10px; outline:none;" placeholder="Fikringiz..."></textarea>
       <button class="btn-fire" style="width:100%; margin-top:10px;" onclick="submitReview()">Yuborish</button>
     </div>
   </div>
@@ -426,9 +384,6 @@
   </div>
 
   <script>
-    /* =========================================================
-       TELEGRAM USER ANIQLASH
-       ========================================================= */
     const tg = window.Telegram ? window.Telegram.WebApp : null;
     if (tg) { tg.ready(); tg.expand(); }
     const tgUser = tg && tg.initDataUnsafe && tg.initDataUnsafe.user ? tg.initDataUnsafe.user : null;
@@ -441,31 +396,21 @@
 
     let CONFIG = { splashLogo: null, banners: [null,null,null], games: [], topUsers: [], reviews: [] };
     let state = { balance: 0, currentGameId: null, currentType: 'uc', selectedPkgIdx: null, payAmount: 50000, currentDepositId: null };
-    let pollInterval = null;
+    let depositPollTimer = null;
 
-    /* ---------- API HELPERS ---------- */
     async function api(path, opts = {}) {
-      try {
-        const res = await fetch(path, {
-          headers: { 'Content-Type': 'application/json' },
-          ...opts
-        });
-        return await res.json();
-      } catch (e) {
-        console.error("API xato:", e);
-        return { ok: false };
-      }
+      const res = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...opts });
+      return res.json();
     }
 
-    /* ---------- INIT ---------- */
     async function init() {
       try {
         const [configRes, userRes] = await Promise.all([
           api('/api/config'),
           api(`/api/user/${USER_ID}`)
         ]);
-        if (configRes) CONFIG = configRes;
-        if (userRes && userRes.user) state.balance = userRes.user.balance;
+        CONFIG = configRes;
+        state.balance = userRes.user.balance;
 
         if (CONFIG.splashLogo) {
           const logoImg = document.getElementById('splashLogo');
@@ -474,10 +419,6 @@
           logoImg.onerror = () => { logoImg.style.display = 'none'; fallbackEl.style.display = 'flex'; };
           logoImg.src = CONFIG.splashLogo;
           logoImg.style.display = 'block';
-        }
-        if (CONFIG.musicUrl) {
-          document.getElementById('bgMusicSource').src = CONFIG.musicUrl;
-          audioEl.load();
         }
 
         renderBanners();
@@ -492,7 +433,7 @@
         setInterval(tickBanners, 3000);
         setInterval(tickReviews, 4000);
       } catch (e) {
-        console.error('Init xato:', e);
+        console.error('Init error:', e);
       } finally {
         setTimeout(() => document.getElementById('splash').classList.add('hide'), 500);
       }
@@ -509,25 +450,23 @@
           document.getElementById('profileAvatarFallback').style.display = 'none';
         }
       } else {
-        document.getElementById('profileName').textContent = 'Mehmon (demo)';
-        document.getElementById('profileHandle').textContent = 'Telegram orqali oching';
+        document.getElementById('profileName').textContent = 'Mehmon';
       }
     }
 
-    /* ---------- RENDER ---------- */
     function renderBanners() {
       const c = document.getElementById('bannerContainer');
       c.innerHTML = '';
       const dots = document.createElement('div');
       dots.className = 'banner-dots';
-      (CONFIG.banners || [null,null,null]).forEach((b, i) => {
+      CONFIG.banners.forEach((b, i) => {
         const slide = document.createElement('div');
         slide.className = 'banner-slide' + (i === 0 ? ' active' : '');
         if (b && b.image) {
           slide.style.backgroundImage = `url('${b.image}')`;
         } else {
           slide.classList.add('empty');
-          slide.innerHTML = `<div class="banner-empty-hint"><i class="fa-solid fa-image"></i>Banner ${i + 1} — admin paneldan qo'shiladi</div>`;
+          slide.innerHTML = `<div class="banner-empty-hint"><i class="fa-solid fa-image"></i>Banner ${i + 1}</div>`;
         }
         c.appendChild(slide);
         const dot = document.createElement('div');
@@ -550,13 +489,13 @@
 
     function renderGames() {
       const g = document.getElementById('gamesGrid');
-      if (!CONFIG.games || !CONFIG.games.length) {
-        g.innerHTML = `<div class="empty-hint" style="grid-column:1/-1;"><i class="fa-solid fa-gamepad"></i>Hali o'yin qo'shilmagan</div>`;
+      if (!CONFIG.games.length) {
+        g.innerHTML = `<div class="empty-hint" style="grid-column:1/-1;"><i class="fa-solid fa-gamepad"></i>O'yinlar topilmadi</div>`;
         return;
       }
       g.innerHTML = CONFIG.games.map(game => `
         <div class="game-item" onclick="openGame('${game.id}')">
-          <img src="${game.image || ''}" alt="${game.name}" onerror="this.style.opacity=0">
+          <img src="${game.image || ''}" alt="${game.name}">
           <div class="game-item-title">${game.name}</div>
         </div>
       `).join('');
@@ -564,7 +503,7 @@
 
     function renderReviews() {
       const box = document.getElementById('reviewsBox');
-      if (!CONFIG.reviews || !CONFIG.reviews.length) { box.innerHTML = `<div class="empty-hint"><i class="fa-solid fa-comment"></i>Hali fikr yo'q</div>`; return; }
+      if (!CONFIG.reviews.length) { box.innerHTML = `<div class="empty-hint">Fikrlar mavjud emas</div>`; return; }
       box.innerHTML = CONFIG.reviews.map((r, i) => `
         <div class="review-slide${i === 0 ? ' active' : ''}">
           <div class="stars">${'<i class="fa-solid fa-star"></i>'.repeat(r.stars)}</div>
@@ -584,12 +523,12 @@
 
     function renderTop() {
       const list = document.getElementById('topList');
-      if (!CONFIG.topUsers || !CONFIG.topUsers.length) { list.innerHTML = `<div class="empty-hint"><i class="fa-solid fa-trophy"></i>Hali reyting yo'q</div>`; return; }
+      if (!CONFIG.topUsers.length) { list.innerHTML = `<div class="empty-hint">Reyting bo'sh</div>`; return; }
       list.innerHTML = CONFIG.topUsers.map(u => `
         <div class="top-row">
           <div class="top-rank${u.medal ? ' medal' : ''}">${u.medal || '#' + u.rank}</div>
           <div class="top-avatar">${u.initial || (u.name || '?')[0]}</div>
-          <div class="top-info"><div class="top-name">${u.name}</div><div class="top-sub">${u.sub || ''}</div></div>
+          <div class="top-info"><div class="top-name">${u.name}</div></div>
           <div class="top-amt">${u.amt}</div>
         </div>
       `).join('');
@@ -599,39 +538,30 @@
       const res = await api(`/api/orders/${USER_ID}`);
       const list = document.getElementById('ordersList');
       if (!res.orders || !res.orders.length) {
-        list.innerHTML = `<div class="empty-hint"><i class="fa-solid fa-box-open"></i>Hali buyurtma yo'q</div>`;
+        list.innerHTML = `<div class="empty-hint"><i class="fa-solid fa-box-open"></i>Buyurtmalar yo'q</div>`;
         return;
       }
-      list.innerHTML = res.orders.map(o => {
-        const statusMap = { pending: ['Kutilmoqda', 'var(--fire-yellow)'], done: ['Bajarildi', '#00b894'], rejected: ['Bekor qilindi', '#ff4757'] };
-        const [label, color] = statusMap[o.status] || statusMap.pending;
-        return `
+      list.innerHTML = res.orders.map(o => `
         <div style="background:var(--card-bg); padding:14px; border-radius:14px; border:1px solid rgba(255,255,255,0.05); margin-bottom:10px;">
           <div style="display:flex; justify-content:space-between; font-weight:700; font-size:14px;">
             <span>${o.packageLabel} (${o.gameName})</span>
-            <span style="color:${color};">${label}</span>
+            <span style="color:${o.status === 'done' ? '#00b894' : '#ffaa00'};">${o.status === 'done' ? 'Bajarildi' : 'Kutilmoqda'}</span>
           </div>
-          <div style="font-size:11px; color:var(--text-sub); margin-top:4px;">#${o.number} · ${new Date(o.createdAt).toLocaleString('uz-UZ')} | ${o.price.toLocaleString('uz-UZ')} so'm</div>
-        </div>`;
-      }).join('');
+          <div style="font-size:11px; color:var(--text-sub); margin-top:4px;">#${o.number} · ${o.price.toLocaleString('uz-UZ')} so'm</div>
+        </div>`).join('');
     }
 
     async function loadReferral() {
       const res = await api(`/api/referral/${USER_ID}`);
-      if (!res) return;
-      document.getElementById('refCode').textContent = res.refLink || res.refCode || '—';
-      document.getElementById('refCode').dataset.value = res.refLink || res.refCode || '';
-      document.getElementById('refCount').textContent = res.refCount || 0;
-      document.getElementById('refEarned').textContent = (res.refEarned || 0).toLocaleString('uz-UZ');
+      document.getElementById('refCode').textContent = res.refLink || res.refCode;
+      document.getElementById('refCode').dataset.value = res.refLink || res.refCode;
+      document.getElementById('refCount').textContent = res.refCount;
+      document.getElementById('refEarned').textContent = res.refEarned.toLocaleString('uz-UZ');
     }
 
-    /* ---------- NAVIGATION ---------- */
     const navOrder = ['asosiy', 'toldirish', 'tarix', 'profil'];
     function switchPage(pageId) {
-      if (pageId !== 'payconfirm' && pollInterval) {
-        clearInterval(pollInterval);
-        pollInterval = null;
-      }
+      if (depositPollTimer && pageId !== 'payconfirm') { clearInterval(depositPollTimer); depositPollTimer = null; }
       document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
       document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
       const target = document.getElementById('p-' + pageId);
@@ -642,7 +572,6 @@
       if (pageId === 'tarix') loadOrders();
     }
 
-    /* ---------- MUSIC ---------- */
     let musicOn = false;
     const audioEl = document.getElementById('bgMusic');
     function toggleMusic() {
@@ -652,9 +581,7 @@
       document.getElementById('musicLabel').textContent = musicOn ? 'Music ON' : 'Music OFF';
       document.getElementById('musicToggle').classList.toggle('on', musicOn);
     }
-    setInterval(() => { if (musicOn && audioEl.paused) audioEl.play().catch(()=>{}); }, 180000);
 
-    /* ---------- TO'LDIRISH ---------- */
     function selectPay(which) {
       document.getElementById('payUzcard').classList.toggle('active', which === 'uzcard');
       document.getElementById('payHumo').classList.toggle('active', which === 'humo');
@@ -664,26 +591,28 @@
       document.querySelectorAll('.chip').forEach(c => c.classList.remove('sel'));
       el.classList.add('sel');
     }
+
     let payTimerInterval = null;
     function goStep2() {
       const amt = parseInt(document.getElementById('depAmount').value) || 0;
-      if (amt < 1000) { alert("Minimal to'ldirish miqdori: 1 000 so'm"); return; }
-      if (amt > 3000000) { alert("Maksimal to'ldirish miqdori: 3 000 000 so'm"); return; }
+      if (amt < 1000) { alert("Minimal miqdor: 1 000 so'm"); return; }
       state.payAmount = amt;
       document.getElementById('payAmtLabel').textContent = amt.toLocaleString('uz-UZ');
       switchPage('paystep');
       startPayTimer();
     }
+
     function startPayTimer() {
       clearInterval(payTimerInterval);
       document.getElementById('payActiveBlock').style.display = '';
       document.getElementById('payExpiredBlock').style.display = 'none';
       let secondsLeft = 180;
-      const total = secondsLeft;
-      updateTimerUI(secondsLeft, total);
       payTimerInterval = setInterval(() => {
         secondsLeft--;
-        updateTimerUI(secondsLeft, total);
+        const m = String(Math.floor(secondsLeft / 60)).padStart(2, '0');
+        const s = String(secondsLeft % 60).padStart(2, '0');
+        document.getElementById('timerVal').textContent = `${m}:${s}`;
+        document.getElementById('timerBar').style.width = `${(secondsLeft / 180) * 100}%`;
         if (secondsLeft <= 0) {
           clearInterval(payTimerInterval);
           document.getElementById('payActiveBlock').style.display = 'none';
@@ -691,63 +620,44 @@
         }
       }, 1000);
     }
-    function updateTimerUI(secondsLeft, total) {
-      const m = String(Math.floor(secondsLeft / 60)).padStart(2, '0');
-      const s = String(secondsLeft % 60).padStart(2, '0');
-      document.getElementById('timerVal').textContent = `${m}:${s}`;
-      document.getElementById('timerBar').style.width = `${(secondsLeft / total) * 100}%`;
-    }
-    function copyCard() { navigator.clipboard.writeText('6262910224120022'); alert("Karta raqami nusxalandi!"); }
 
-    /* ===== AVTO/ADMIN TO'LOV TEKSHIRISH (POLLING) ===== */
+    function copyCard() { navigator.clipboard.writeText('6262910224120022'); alert("Karta nusxalandi!"); }
+
     async function confirmPayment() {
       clearInterval(payTimerInterval);
       const res = await api('/api/deposits', {
         method: 'POST',
-        body: JSON.stringify({
-          userId: USER_ID,
-          amount: state.payAmount,
-          method: document.getElementById('payUzcard').classList.contains('active') ? 'uzcard' : 'humo'
-        })
+        body: JSON.stringify({ userId: USER_ID, amount: state.payAmount, method: 'uzcard' })
       });
-      
       state.currentDepositId = res.deposit ? res.deposit.id : null;
       switchPage('payconfirm');
-      
-      // Har 3 sekundda serverdan holatni so'rab turish
-      pollDepositStatus();
+      startAutoCheck();
     }
 
-    function pollDepositStatus() {
-      if (!state.currentDepositId) return;
-      if (pollInterval) clearInterval(pollInterval);
-
-      pollInterval = setInterval(async () => {
-        const res = await api(`/api/deposits/${state.currentDepositId}`);
-        if (!res || !res.ok || !res.deposit) return;
-
-        if (res.deposit.status === 'confirmed') {
-          clearInterval(pollInterval);
-          pollInterval = null;
-          
-          // Balansni yangilash
-          const u = await api(`/api/user/${USER_ID}`);
-          if (u && u.user) state.balance = u.user.balance;
-          updateBalanceUI();
-
-          alert("✅ To'lovingiz tasdiqlandi! Balansga qo'shildi.");
-          switchPage('asosiy');
-        } else if (res.deposit.status === 'rejected') {
-          clearInterval(pollInterval);
-          pollInterval = null;
-
-          alert("❌ To'lov bekor qilindi yoki topilmadi.");
-          switchPage('toldirish');
-        }
+    function startAutoCheck() {
+      if (depositPollTimer) clearInterval(depositPollTimer);
+      depositPollTimer = setInterval(async () => {
+        await manualCheckNow(true);
       }, 3000);
     }
 
-    /* ---------- GAME DETAIL ---------- */
+    async function manualCheckNow(silent = false) {
+      if (!state.currentDepositId) return;
+      try {
+        const res = await api(`/api/deposits/${state.currentDepositId}`);
+        if (res.ok && res.deposit.status === 'confirmed') {
+          if (depositPollTimer) clearInterval(depositPollTimer);
+          const u = await api(`/api/user/${USER_ID}`);
+          state.balance = u.user.balance;
+          updateBalanceUI();
+          alert("✅ To'lov qabul qilindi! Balans to'ldirildi.");
+          switchPage('asosiy');
+        } else if (!silent) {
+          alert("⏳ To'lov hali yetib kelmadi. SMS kelgan bo'lsa biroz kuting.");
+        }
+      } catch(e) {}
+    }
+
     function openGame(gameId) {
       const game = CONFIG.games.find(g => g.id === gameId);
       if (!game) return;
@@ -759,86 +669,64 @@
       document.getElementById('gameRating').textContent = game.rating || '—';
       document.getElementById('playerIdInput').value = '';
       document.getElementById('checkResult').className = 'check-result';
-      document.querySelectorAll('.type-tab').forEach((t, i) => t.classList.toggle('active', i === 0));
       renderPackages();
       switchPage('game');
     }
+
     function selectType(type) {
       state.currentType = type;
       state.selectedPkgIdx = null;
       document.querySelectorAll('.type-tab').forEach(t => t.classList.toggle('active', t.dataset.type === type));
       renderPackages();
     }
+
     function renderPackages() {
       const game = CONFIG.games.find(g => g.id === state.currentGameId);
-      const pkgs = (game && game.types && game.types[state.currentType]) ? game.types[state.currentType] : [];
+      const pkgs = (game.types[state.currentType] || []);
       const grid = document.getElementById('pkgGrid');
-      if (!pkgs.length) { grid.innerHTML = `<div style="grid-column:1/-1;" class="empty-hint"><i class="fa-solid fa-box"></i>Bu bo'lim uchun hali paket yo'q</div>`; return; }
-      grid.innerHTML = pkgs.map((p, i) => {
-        const iconHtml = p.icon && p.icon.startsWith('/uploads/') ? `<img src="${p.icon}" alt="Icon">` : (p.icon || '🪙');
-        return `
+      if (!pkgs.length) { grid.innerHTML = `<div style="grid-column:1/-1;" class="empty-hint">Paketlar yo'q</div>`; return; }
+      grid.innerHTML = pkgs.map((p, i) => `
         <div class="pkg-card" data-i="${i}" onclick="selectPkg(${i})">
           <div class="pkg-check"><i class="fa-solid fa-check"></i></div>
-          <div class="pkg-icon">${iconHtml}</div>
+          <div class="pkg-icon">🪙</div>
           <div class="pkg-amt">${p.amt}</div>
           <div class="pkg-price">${Number(p.price).toLocaleString('uz-UZ')} so'm</div>
-        </div>`;
-      }).join('');
+        </div>`).join('');
     }
+
     function selectPkg(i) {
       state.selectedPkgIdx = i;
       document.querySelectorAll('.pkg-card').forEach(c => c.classList.toggle('sel', parseInt(c.dataset.i) === i));
     }
+
     async function checkPlayerId() {
       const val = document.getElementById('playerIdInput').value.trim();
       const resultEl = document.getElementById('checkResult');
-      if (!val) { resultEl.className = 'check-result show bad'; resultEl.innerHTML = `<i class="fa-solid fa-circle-exclamation"></i> ID kiriting`; return; }
+      if (!val) return;
       resultEl.className = 'check-result show'; resultEl.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Tekshirilmoqda...`;
       const res = await api('/api/check-id', { method: 'POST', body: JSON.stringify({ gameCode: state.currentGameId, playerId: val }) });
-      if (res && res.found) {
+      if (res.found) {
         resultEl.className = 'check-result show ok';
-        resultEl.innerHTML = `<i class="fa-solid fa-circle-check"></i> ID topildi${res.nickname ? ': ' + res.nickname : ''}`;
+        resultEl.innerHTML = `<i class="fa-solid fa-circle-check"></i> Topildi${res.nickname ? ': ' + res.nickname : ''}`;
       } else {
         resultEl.className = 'check-result show bad';
-        resultEl.innerHTML = `<i class="fa-solid fa-circle-xmark"></i> ID topilmadi, qaytadan tekshiring`;
+        resultEl.innerHTML = `<i class="fa-solid fa-circle-xmark"></i> ID topilmadi`;
       }
     }
+
     async function buyPackage() {
       const resultEl = document.getElementById('checkResult');
-      if (!resultEl.classList.contains('ok')) { alert("Avval ID ni tekshiring va topilganini tasdiqlang."); return; }
-      if (state.selectedPkgIdx === null) { alert("Paket tanlang."); return; }
-      const userName = tgUser ? (tgUser.username ? '@' + tgUser.username : tgUser.first_name) : null;
+      if (!resultEl.classList.contains('ok')) { alert("Avval ID ni tekshiring"); return; }
+      if (state.selectedPkgIdx === null) { alert("Paket tanlang"); return; }
       const res = await api('/api/orders', {
         method: 'POST',
-        body: JSON.stringify({ userId: USER_ID, userName, gameId: state.currentGameId, type: state.currentType, packageIndex: state.selectedPkgIdx, playerId: document.getElementById('playerIdInput').value.trim() })
+        body: JSON.stringify({ userId: USER_ID, gameId: state.currentGameId, type: state.currentType, packageIndex: state.selectedPkgIdx, playerId: document.getElementById('playerIdInput').value.trim() })
       });
-      if (!res || !res.ok) { alert(res.error || 'Xatolik yuz berdi'); if (res && res.error === 'Balans yetarli emas') switchPage('toldirish'); return; }
+      if (!res.ok) { alert(res.error || 'Xatolar yuz berdi'); return; }
       state.balance = res.balance;
       updateBalanceUI();
-      showBuySuccessBanner(res.order);
-    }
-
-    function showBuySuccessBanner(order) {
-      const modal = document.createElement('div');
-      modal.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.8); display:flex; align-items:center; justify-content:center; z-index:9999;';
-      modal.innerHTML = `
-        <div style="background:var(--card-bg); border:2px solid #00b894; border-radius:20px; padding:30px; max-width:400px; text-align:center; box-shadow:0 10px 40px rgba(0,0,0,0.5);">
-          <div style="font-size:60px; margin-bottom:15px;">✅</div>
-          <div style="font-size:22px; font-weight:800; color:#00b894; margin-bottom:15px;">Buyurtma qabul qilindi!</div>
-          <div style="font-size:14px; color:var(--text-sub); line-height:1.8; margin-bottom:20px;">
-            <b>#${order.number}</b> raqamli buyurtmangiz admin tomonidan qayta ko'rib chiqilinadi.<br><br>
-            <b>${order.gameName}</b><br>
-            ${order.packageLabel} — ${Number(order.price).toLocaleString('uz-UZ')} so'm
-          </div>
-          <div style="font-size:13px; color:#ffa500; margin-bottom:20px; padding:12px; background:rgba(255,165,0,0.1); border-radius:10px; border-left:3px solid #ffa500;">
-            Telegram botga tasdiqlash xabari keladi ⏱
-          </div>
-          <button onclick="this.parentElement.parentElement.remove(); switchPage('tarix');" style="width:100%; padding:14px; background:linear-gradient(90deg, var(--fire-yellow), var(--fire-orange)); color:#000; border:none; border-radius:10px; font-weight:800; cursor:pointer; font-size:16px;">
-            Buyurtmalar ro'yxatiga
-          </button>
-        </div>
-      `;
-      document.body.appendChild(modal);
+      alert("Buyurtma qabul qilindi!");
+      switchPage('tarix');
     }
 
     function updateBalanceUI() {
@@ -847,7 +735,6 @@
       document.getElementById('balanceValProfile').textContent = label;
     }
 
-    /* ---------- REVIEW ---------- */
     let selectedStars = 0;
     document.getElementById('starRate').addEventListener('click', (e) => {
       const star = e.target.closest('i');
@@ -855,37 +742,18 @@
       selectedStars = parseInt(star.dataset.v);
       document.querySelectorAll('#starRate i').forEach(s => s.classList.toggle('on', parseInt(s.dataset.v) <= selectedStars));
     });
-    function openReviewModal() {
-      selectedStars = 0;
-      document.querySelectorAll('#starRate i').forEach(s => s.classList.remove('on'));
-      document.getElementById('reviewText').value = '';
-      document.getElementById('reviewModal').style.display = 'flex';
-    }
+    function openReviewModal() { document.getElementById('reviewModal').style.display = 'flex'; }
     async function submitReview() {
-      if (!selectedStars) { alert("Yulduzlarni tanlang."); return; }
-      const name = tgUser ? (tgUser.first_name || 'Siz') : 'Siz';
-      const res = await api('/api/reviews', { method: 'POST', body: JSON.stringify({ name, stars: selectedStars, text: document.getElementById('reviewText').value }) });
-      if (res && res.review) {
-        CONFIG.reviews.unshift(res.review);
-        renderReviews();
-        closeModal('reviewModal');
-        alert("Fikringiz uchun rahmat!");
-      }
+      if (!selectedStars) return;
+      const res = await api('/api/reviews', { method: 'POST', body: JSON.stringify({ name: 'Foydalanuvchi', stars: selectedStars, text: document.getElementById('reviewText').value }) });
+      CONFIG.reviews.unshift(res.review);
+      renderReviews();
+      document.getElementById('reviewModal').style.display = 'none';
     }
-    function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 
-    function openSupport() {
-      const url = 'https://t.me/x7fan';
-      document.getElementById('supportLinkConfirm').href = url;
-      if (confirm("Admin bilan bog'lanishni xohlaysizmi?")) {
-        if (tg) tg.openTelegramLink(url); else window.open(url, '_blank');
-      }
-    }
-    function openChannel() {
-      const url = 'https://t.me/arkootzif';
-      if (tg) tg.openTelegramLink(url); else window.open(url, '_blank');
-    }
-    function copyRef() { navigator.clipboard.writeText(document.getElementById('refCode').dataset.value || document.getElementById('refCode').textContent); alert("Referal havola nusxalandi!"); }
+    function openSupport() { if (tg) tg.openTelegramLink('https://t.me/x7fan'); else window.open('https://t.me/x7fan', '_blank'); }
+    function openChannel() { if (tg) tg.openTelegramLink('https://t.me/arkootzif'); else window.open('https://t.me/arkootzif', '_blank'); }
+    function copyRef() { navigator.clipboard.writeText(document.getElementById('refCode').dataset.value); alert("Havola nusxalandi!"); }
 
     init();
   </script>
