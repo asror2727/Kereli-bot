@@ -1,90 +1,408 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const multer = require('multer');
 const path = require('path');
+const fs = require('fs');
+const { nanoid } = require('nanoid');
+const { readDb, updateDb, getUser, nextOrderNumber } = require('./src/db');
+const { initBot, getBotUsername } = require('./src/bot');
+
+const MIN_DEPOSIT = 1000;
+const MAX_DEPOSIT = 3000000;
 
 const app = express();
+const PORT = process.env.PORT || 3000;
+
 app.use(cors());
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: true })); // SMS Forwarder ba'zan form-data yuboradi
 app.use(express.static(path.join(__dirname, 'public')));
 
-/* ==================== DATABASE ==================== */
-let DB = {
-  users: {},
-  deposits: {} // dep_id: { id, userId, amount, status }
-};
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+app.use('/uploads', express.static(uploadsDir));
 
-/* ==================== SMS RECEIVER ==================== */
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadsDir),
+  filename: (req, file, cb) => cb(null, `${Date.now()}-${nanoid(6)}${path.extname(file.originalname)}`)
+});
+const upload = multer({ storage, limits: { fileSize: 8 * 1024 * 1024 } });
 
-app.post('/api/sms-receiver', (req, res) => {
+// TELEGRAM BOT NI ISHGA TUSHIRISH (Barcha /start buyruqlari ./src/bot.js ichida)
+const bot = initBot();
+
+// ADMIN AUTH
+function requireAdmin(req, res, next) {
+  const token = req.headers['x-admin-token'];
+  if (!token || token !== process.env.ADMIN_PASSWORD) {
+    return res.status(401).json({ ok: false, error: 'Ruxsat yo\'q' });
+  }
+  next();
+}
+
+app.post('/api/admin/login', (req, res) => {
+  const { password } = req.body;
+  if (password === process.env.ADMIN_PASSWORD) {
+    return res.json({ ok: true, token: password });
+  }
+  res.status(401).json({ ok: false, error: "Parol noto'g'ri" });
+});
+
+// PUBLIC CONFIG
+app.get('/api/config', (req, res) => {
+  const db = readDb();
+  res.json({
+    splashLogo: db.splashLogo,
+    musicUrl: db.musicUrl,
+    banners: db.banners,
+    games: db.games,
+    topUsers: db.topUsers,
+    reviews: db.reviews
+  });
+});
+
+// USER / BALANCE
+app.get('/api/user/:id', (req, res) => {
+  const db = readDb();
+  const user = getUser(db, req.params.id);
+  res.json({ ok: true, user });
+});
+
+// ID TEKSHIRISH
+app.post('/api/check-id', async (req, res) => {
+  const { playerId } = req.body;
+  if (!playerId) return res.status(400).json({ ok: false, error: 'ID kiritilmagan' });
+  const found = /^\d{6,}$/.test(playerId.trim());
+  res.json({ ok: true, found, nickname: null, fallback: true });
+});
+
+// =========================================================
+// SMS WEBHOOK — TO'LIQ ISHLAYDIGAN AVTO-TASDIQLASH
+// =========================================================
+const SMS_SECRET_KEY = process.env.SMS_SECRET || 'zohirbek0022';
+
+app.post('/api/sms-receiver', async (req, res) => {
   try {
-    // Har qanday kelgan ma'lumotni textga aylantiramiz
-    const rawData = JSON.stringify(req.body) + JSON.stringify(req.query);
-    console.log(`[SMS KELDI]: ${rawData}`);
+    const rawData = req.body;
+    console.log('[SMS RAW KELDI]:', JSON.stringify(rawData));
 
-    // Agar matn bo'sh bo'lmasa yoki SMS hodisasi bo'lsa
-    // Kutilayotgan (pending) statusdagi depositlarni topamiz
-    const pendingIds = Object.keys(DB.deposits).filter(id => DB.deposits[id].status === 'pending');
+    const secret = rawData.secret || req.query.secret;
+    const message = rawData.message || rawData.text || rawData.sms || '';
 
-    if (pendingIds.length > 0) {
-      // Eng oxirgi kutilayotgan to'lovni olamiz
-      const lastDepId = pendingIds[pendingIds.length - 1];
-      const deposit = DB.deposits[lastDepId];
-
-      deposit.status = 'confirmed';
-
-      // User balansini oshirish
-      if (!DB.users[deposit.userId]) {
-        DB.users[deposit.userId] = { id: deposit.userId, balance: 0 };
-      }
-      DB.users[deposit.userId].balance += deposit.amount;
-
-      console.log(`✅ [AUTO-CONFIRMED] DepID: ${lastDepId} | User: ${deposit.userId} | Summa: ${deposit.amount}`);
-    } else {
-      console.log('⚠️ [SMS IGNORED] Kutilayotgan (pending) to\'lov topilmadi.');
+    // Secret key tekshiruv
+    if (secret && secret !== SMS_SECRET_KEY) {
+      console.warn('[SMS] Noto\'g\'ri secret key!');
+      return res.status(200).json({ success: false, error: 'Invalid secret' });
     }
 
-    // Telefon ilovasiga HAR DOIM 200 OK qaytaramiz
-    return res.status(200).json({ ok: true });
+    // Telefon yuborgan test xabarlariga 200 qaytarish (error bermasligi uchun)
+    if (!message || message.includes('%SMS_BODY%') || message.includes('%body%')) {
+      console.log("[SMS TEST] Shablon parametri keldi, javob qaytarildi.");
+      return res.status(200).json({ success: true, message: 'Test qabul qilindi' });
+    }
+
+    // Summani SMS ichidan qidirish
+    const amountMatch = message.match(/(?:karta|to'lov|tushdi|baza|summa|balans|vosxod|popolnenie)[\s\S]*?([\d\s\.]+)\s*(?:UZS|so'm|sum|сум)/i) || 
+                        message.match(/([\d\s\.]+)\s*(?:UZS|so'm|sum|сум)/i) ||
+                        message.match(/(\d{4,})/);
+
+    let amount = 0;
+    if (amountMatch) {
+      const rawAmount = amountMatch[1].replace(/\s+/g, '').split('.')[0];
+      amount = parseInt(rawAmount, 10);
+    }
+
+    console.log(`[SMS PARSED] Tushgan summa: ${amount} so'm`);
+
+    let confirmedDeposit = null;
+
+    updateDb((db) => {
+      // 1. Birinchi bo'lib summa bo'yicha pending deposit qidiriladi
+      let depIndex = -1;
+      if (amount > 0) {
+        depIndex = db.deposits.findIndex(d => d.status === 'pending' && Number(d.amount) === amount);
+      }
+
+      // 2. Agar summa bilan topilmasa, eng oxirgi kutilayotgan deposit avto-tasdiqlanadi
+      if (depIndex === -1) {
+        depIndex = db.deposits.findIndex(d => d.status === 'pending');
+      }
+
+      if (depIndex !== -1) {
+        const dep = db.deposits[depIndex];
+        dep.status = 'confirmed';
+        dep.confirmedAt = new Date().toISOString();
+
+        const creditAmount = amount > 0 ? amount : dep.amount;
+        const user = getUser(db, dep.userId);
+        user.balance = Number(user.balance || 0) + creditAmount;
+
+        confirmedDeposit = { ...dep, credited: creditAmount };
+      }
+    });
+
+    if (confirmedDeposit) {
+      console.log(`✅ [SMS AUTO] Depozit tasdiqlandi: User ${confirmedDeposit.userId} -> ${confirmedDeposit.credited} so'm`);
+
+      if (bot && bot.telegram) {
+        bot.telegram.sendMessage(
+          confirmedDeposit.userId,
+          `✅ **To'lovingiz AVTOMATIK tasdiqlandi!**\n\n💰 **${confirmedDeposit.credited.toLocaleString('uz-UZ')} so'm** balansingizga qo'shildi.`,
+          { parse_mode: 'Markdown' }
+        ).catch(() => {});
+      }
+    } else {
+      console.log('⚠️ [SMS] Kutilayotgan deposit topilmadi.');
+    }
+
+    // TELEFONGA HAR DOIM 200 OK QAYTARISh SHART
+    return res.status(200).json({ success: true, message: 'SMS processed' });
+
   } catch (err) {
-    console.error('SMS Error:', err.message);
-    return res.status(200).json({ ok: false });
+    console.error('[SMS ERROR]:', err);
+    return res.status(200).json({ success: false, error: err.message });
   }
 });
 
-/* ==================== WEBAPP API ENDPOINTS ==================== */
+// P2P TO'LOV TEKSHIRISH
+app.post('/api/p2p-check', (req, res) => {
+  const { phone } = req.body;
+  if (!phone) return res.status(400).json({ ok: false, error: 'Telefon kiritilmagan' });
 
-// User balansi
-app.get('/api/user/:userId', (req, res) => {
-  const { userId } = req.params;
-  if (!DB.users[userId]) {
-    DB.users[userId] = { id: userId, balance: 0 };
+  const db = readDb();
+  const normalizedPhone = String(phone).replace(/\D/g, '').slice(-12);
+
+  let foundUser = null;
+  for (const [userId, user] of Object.entries(db.users)) {
+    if (String(userId).includes(normalizedPhone) || normalizedPhone.includes(String(userId).slice(-10))) {
+      foundUser = { userId, user };
+      break;
+    }
   }
-  res.json({ user: DB.users[userId] });
+
+  if (foundUser) {
+    res.json({ ok: true, found: true, userId: foundUser.userId, balance: foundUser.user.balance });
+  } else {
+    res.json({ ok: true, found: false });
+  }
 });
 
-// Depozit yaratish
+// BUYURTMA YARATISH
+app.post('/api/orders', async (req, res) => {
+  const { userId, userName, gameId, type, packageIndex, playerId } = req.body;
+  const db = readDb();
+  const game = db.games.find((g) => g.id === gameId);
+  if (!game) return res.status(404).json({ ok: false, error: "O'yin topilmadi" });
+  const pkg = (game.types[type] || [])[packageIndex];
+  if (!pkg) return res.status(404).json({ ok: false, error: 'Paket topilmadi' });
+
+  const user = getUser(db, userId);
+  if (user.balance < pkg.price) {
+    return res.status(400).json({ ok: false, error: 'Balans yetarli emas' });
+  }
+
+  const orderId = nanoid(10);
+  user.balance -= pkg.price;
+
+  let order;
+  updateDb((d) => {
+    const number = nextOrderNumber(d);
+    order = {
+      id: orderId,
+      number,
+      userId,
+      userName: userName || null,
+      gameName: game.name,
+      packageLabel: pkg.amt,
+      price: pkg.price,
+      playerId,
+      status: 'pending',
+      createdAt: new Date().toISOString()
+    };
+    d.orders.unshift(order);
+    getUser(d, userId).balance = user.balance;
+  });
+
+  if (bot && bot._sendOrderNotification) bot._sendOrderNotification(order);
+
+  res.json({ ok: true, order, balance: user.balance });
+});
+
+app.get('/api/orders/:userId', (req, res) => {
+  const db = readDb();
+  const orders = db.orders.filter((o) => o.userId === req.params.userId);
+  res.json({ ok: true, orders });
+});
+
+// TO'LDIRISH (DEPOSIT)
 app.post('/api/deposits', (req, res) => {
-  const { userId, amount } = req.body;
-  const depositId = 'dep_' + Date.now();
+  const { userId, amount, method } = req.body;
+  if (!userId || !amount) return res.status(400).json({ ok: false, error: "Ma'lumot yetarli emas" });
+  const amt = Number(amount);
+  if (amt < MIN_DEPOSIT) return res.status(400).json({ ok: false, error: `Minimal to'ldirish miqdori: ${MIN_DEPOSIT.toLocaleString('uz-UZ')} so'm` });
+  if (amt > MAX_DEPOSIT) return res.status(400).json({ ok: false, error: `Maksimal to'ldirish miqdori: ${MAX_DEPOSIT.toLocaleString('uz-UZ')} so'm` });
 
-  DB.deposits[depositId] = {
-    id: depositId,
-    userId,
-    amount: Number(amount),
+  const deposit = {
+    id: nanoid(10),
+    userId: String(userId),
+    amount: amt,
+    method: method || 'uzcard',
     status: 'pending',
-    createdAt: new Date()
+    createdAt: new Date().toISOString()
   };
 
-  res.json({ ok: true, deposit: DB.deposits[depositId] });
+  updateDb((db) => {
+    db.deposits.unshift(deposit);
+    getUser(db, userId);
+  });
+
+  res.json({ ok: true, deposit });
 });
 
-// Polling (HTML ushbu API orqali statusni avto-tekshiradi)
-app.get('/api/deposits/:depositId', (req, res) => {
-  const deposit = DB.deposits[req.params.depositId];
+app.get('/api/deposits/:id', (req, res) => {
+  const db = readDb();
+  const deposit = db.deposits.find((d) => d.id === req.params.id);
   if (!deposit) return res.status(404).json({ ok: false });
   res.json({ ok: true, deposit });
 });
 
-const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(`FlayPay Server ${PORT}-portda ishlamoqda`));
+// REVIEWS
+app.post('/api/reviews', (req, res) => {
+  const { name, stars, text } = req.body;
+  const review = { name: name || 'Mehmon', stars: Math.min(5, Math.max(1, Number(stars) || 5)), text: text || '' };
+  updateDb((db) => { db.reviews.unshift(review); db.reviews = db.reviews.slice(0, 30); });
+  res.json({ ok: true, review });
+});
+
+// REFERRAL
+app.get('/api/referral/:userId', (req, res) => {
+  const db = readDb();
+  const user = getUser(db, req.params.userId);
+  const botUsername = getBotUsername();
+  const refLink = botUsername ? `https://t.me/${botUsername}?start=${user.refCode}` : null;
+  res.json({ ok: true, refCode: user.refCode, refLink, refCount: user.refCount, refEarned: user.refEarned });
+});
+
+// ADMIN PANEL ROUTES
+app.post('/api/admin/splash', requireAdmin, upload.single('logo'), (req, res) => {
+  if (!req.file) return res.status(400).json({ ok: false, error: 'Fayl yo\'q' });
+  const url = `/uploads/${req.file.filename}`;
+  updateDb((db) => { db.splashLogo = url; });
+  res.json({ ok: true, url });
+});
+
+app.post('/api/admin/banners/:slot', requireAdmin, upload.single('image'), (req, res) => {
+  const slot = Number(req.params.slot);
+  if (![0, 1, 2].includes(slot)) return res.status(400).json({ ok: false, error: "Slot 0-2 oralig'ida bo'lishi kerak" });
+  const { title, sub } = req.body;
+  const image = req.file ? `/uploads/${req.file.filename}` : req.body.image;
+  updateDb((db) => {
+    db.banners[slot] = { image, title: title || '', sub: sub || '' };
+  });
+  res.json({ ok: true });
+});
+
+app.delete('/api/admin/banners/:slot', requireAdmin, (req, res) => {
+  const slot = Number(req.params.slot);
+  updateDb((db) => { db.banners[slot] = null; });
+  res.json({ ok: true });
+});
+
+app.post('/api/admin/games', requireAdmin, upload.single('image'), (req, res) => {
+  const { name, rating } = req.body;
+  const image = req.file ? `/uploads/${req.file.filename}` : req.body.image;
+  const game = { id: nanoid(8), name, rating: rating || '5 · 0', image, types: { uc: [], prime: [] } };
+  updateDb((db) => { db.games.push(game); });
+  res.json({ ok: true, game });
+});
+
+app.put('/api/admin/games/:id', requireAdmin, upload.single('image'), (req, res) => {
+  const { name, rating } = req.body;
+  updateDb((db) => {
+    const game = db.games.find((g) => g.id === req.params.id);
+    if (!game) return;
+    if (name) game.name = name;
+    if (rating) game.rating = rating;
+    if (req.file) game.image = `/uploads/${req.file.filename}`;
+  });
+  res.json({ ok: true });
+});
+
+app.delete('/api/admin/games/:id', requireAdmin, (req, res) => {
+  updateDb((db) => { db.games = db.games.filter((g) => g.id !== req.params.id); });
+  res.json({ ok: true });
+});
+
+app.post('/api/admin/games/:id/packages', requireAdmin, (req, res) => {
+  const { type, icon, amt, price } = req.body;
+  updateDb((db) => {
+    const game = db.games.find((g) => g.id === req.params.id);
+    if (!game) return;
+    if (!game.types[type]) game.types[type] = [];
+    game.types[type].push({ icon: icon || '🪙', amt, price: Number(price) });
+  });
+  res.json({ ok: true });
+});
+
+app.delete('/api/admin/games/:id/packages/:type/:index', requireAdmin, (req, res) => {
+  updateDb((db) => {
+    const game = db.games.find((g) => g.id === req.params.id);
+    if (!game || !game.types[req.params.type]) return;
+    game.types[req.params.type].splice(Number(req.params.index), 1);
+  });
+  res.json({ ok: true });
+});
+
+app.post('/api/admin/top', requireAdmin, (req, res) => {
+  const { topUsers } = req.body;
+  updateDb((db) => { db.topUsers = topUsers; });
+  res.json({ ok: true });
+});
+
+app.get('/api/admin/deposits', requireAdmin, (req, res) => {
+  const db = readDb();
+  res.json({ ok: true, deposits: db.deposits });
+});
+
+app.post('/api/admin/deposits/:id/confirm', requireAdmin, (req, res) => {
+  updateDb((db) => {
+    const dep = db.deposits.find((d) => d.id === req.params.id);
+    if (!dep || dep.status !== 'pending') return;
+    dep.status = 'confirmed';
+    getUser(db, dep.userId).balance += dep.amount;
+  });
+  res.json({ ok: true });
+});
+
+app.post('/api/admin/deposits/:id/reject', requireAdmin, (req, res) => {
+  updateDb((db) => {
+    const dep = db.deposits.find((d) => d.id === req.params.id);
+    if (!dep) return;
+    dep.status = 'rejected';
+  });
+  res.json({ ok: true });
+});
+
+app.get('/api/admin/orders', requireAdmin, (req, res) => {
+  const db = readDb();
+  res.json({ ok: true, orders: db.orders });
+});
+
+app.post('/api/admin/orders/:id/status', requireAdmin, (req, res) => {
+  const { status } = req.body;
+  updateDb((db) => {
+    const order = db.orders.find((o) => o.id === req.params.id);
+    if (order) order.status = status;
+  });
+  res.json({ ok: true });
+});
+
+app.delete('/api/admin/reviews/:index', requireAdmin, (req, res) => {
+  updateDb((db) => { db.reviews.splice(Number(req.params.index), 1); });
+  res.json({ ok: true });
+});
+
+app.listen(PORT, () => {
+  console.log(`✅ FlayPay server ${PORT}-portda ishga tushdi`);
+});
