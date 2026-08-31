@@ -9,18 +9,15 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cors());
 
-// Statik fayllar joyi
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 const DB_FILE = path.join(__dirname, 'db.json');
 
-// TELEGRAM BOT (O'zingizning Token va Admin ID ingizni yozing)
-const BOT_TOKEN = process.env.BOT_TOKEN || '7433829032:AAEB40X-XXXXXXXXXXXXXXX';
+const BOT_TOKEN = process.env.BOT_TOKEN || 'YOUR_BOT_TOKEN_HERE';
 const ADMIN_ID = process.env.ADMIN_ID || '123456789';
 const bot = new Telegraf(BOT_TOKEN);
 
-// DATABASE FUNKSIYALARI
 function readDb() {
   if (!fs.existsSync(DB_FILE)) {
     const initData = {
@@ -41,7 +38,6 @@ function writeDb(data) {
 
 // API ENDPOINTS
 
-// 1. Config va Foydalanuvchi ma'lumotlari
 app.get('/api/config', (req, res) => {
   const db = readDb();
   res.json(db.config);
@@ -57,7 +53,6 @@ app.get('/api/user/:id', (req, res) => {
   res.json({ user: db.users[userId] });
 });
 
-// 2. Deposit Yaratish
 app.post('/api/deposits', (req, res) => {
   const { userId, amount, method } = req.body;
   const db = readDb();
@@ -78,7 +73,6 @@ app.post('/api/deposits', (req, res) => {
   res.json({ ok: true, deposit });
 });
 
-// 3. Deposit Holatini Tekshirish (Frontend Avto-Poll uchun)
 app.get('/api/deposits/:id', (req, res) => {
   const db = readDb();
   const dep = db.deposits.find(d => d.id === req.params.id);
@@ -86,13 +80,20 @@ app.get('/api/deposits/:id', (req, res) => {
   res.json({ ok: true, deposit: dep });
 });
 
-// 4. SMS RECEIVER (SMS Forwarder dan keluvchi Avto-Tasdiqlash)
+// SMS RECEIVER (FILTRLANGAN VA XATOSIZ)
 app.post('/api/sms-receiver', (req, res) => {
   try {
     const bodyText = req.body.message || JSON.stringify(req.body);
     console.log('[SMS RAW KELDI]:', bodyText);
 
-    // Summani SMS matnidan ajratib olish Regex
+    // 1. Agar SMS tasdiqlash kodi / OTP bo'lsa, uni rad etamiz
+    const lowerText = bodyText.toLowerCase();
+    if (lowerText.includes('kod') || lowerText.includes('code') || lowerText.includes('o\'tkazilmoqda') || lowerText.includes('otkazilmoqda')) {
+      console.log('⚠️ [SMS IGNORED] Bu kirish yoki o\'tkazma kodi, to\'lov xabari emas.');
+      return res.status(200).json({ success: false, message: 'OTP Ignored' });
+    }
+
+    // 2. Summani ajratib olish
     const amountMatches = bodyText.match(/(\d[\d\s\.]{2,}\d)\s*(sum|so'm|uzs)?/i);
     let amount = 0;
 
@@ -101,42 +102,42 @@ app.post('/api/sms-receiver', (req, res) => {
       amount = parseInt(cleanNum, 10);
     }
 
-    console.log(`[SMS PARSED] Aniqlangan summa: ${amount} so'm`);
+    console.log(`[SMS PARSED] Tushgan summa: ${amount} so'm`);
+
+    if (!amount || amount <= 0) {
+      return res.status(200).json({ success: false, message: 'Summa topilmadi' });
+    }
 
     const db = readDb();
 
-    // Mos kutilayotgan depositni qidirish
+    // Summa bo'yicha kutilayotgan depositni topish
     let depIndex = db.deposits.findIndex(d => d.status === 'pending' && Number(d.amount) === amount);
 
-    // Agarda aniq summa bo'yicha topilmasa, eng oxirgi pending depositni avto-tasdiqlash
-    if (depIndex === -1 && amount > 0) {
-      depIndex = db.deposits.findIndex(d => d.status === 'pending');
+    if (depIndex === -1) {
+      console.log('⚠️ [SMS] Kutilayotgan deposit topilmadi.');
+      return res.status(200).json({ success: false, message: 'Deposit matching failed' });
     }
 
-    if (depIndex !== -1) {
-      const dep = db.deposits[depIndex];
-      dep.status = 'confirmed';
-      dep.confirmedAt = new Date().toISOString();
+    const dep = db.deposits[depIndex];
+    dep.status = 'confirmed';
+    dep.confirmedAt = new Date().toISOString();
 
-      if (!db.users[dep.userId]) {
-        db.users[dep.userId] = { id: dep.userId, balance: 0, refCount: 0, refEarned: 0 };
-      }
-
-      const addAmount = amount > 0 ? amount : dep.amount;
-      db.users[dep.userId].balance += addAmount;
-
-      writeDb(db);
-      console.log(`[SUCCESS] Deposit confirmed for user ${dep.userId}. New Balance: ${db.users[dep.userId].balance}`);
-
-      // Telegram Bot orqali foydalanuvchiga bildirishnoma yuborish
-      bot.telegram.sendMessage(
-        dep.userId,
-        `✅ **To'lovingiz tasdiqlandi!**\n\n💰 Summa: ${addAmount.toLocaleString('uz-UZ')} so'm\nBalansingiz muvaffaqiyatli to'ldirildi.`,
-        { parse_mode: 'Markdown' }
-      ).catch(() => {});
+    if (!db.users[dep.userId]) {
+      db.users[dep.userId] = { id: dep.userId, balance: 0, refCount: 0, refEarned: 0 };
     }
 
-    return res.status(200).json({ success: true, message: 'SMS qabul qilindi' });
+    db.users[dep.userId].balance += amount;
+    writeDb(db);
+
+    console.log(`✅ [SMS AUTO] Depozit tasdiqlandi: User ${dep.userId} -> ${amount} so'm`);
+
+    bot.telegram.sendMessage(
+      dep.userId,
+      `✅ **To'lovingiz tasdiqlandi!**\n\n💰 Summa: ${amount.toLocaleString('uz-UZ')} so'm\nBalansingiz to'ldirildi.`,
+      { parse_mode: 'Markdown' }
+    ).catch(() => {});
+
+    return res.status(200).json({ success: true });
 
   } catch (err) {
     console.error('[SMS RECEIVER ERROR]:', err);
@@ -144,7 +145,6 @@ app.post('/api/sms-receiver', (req, res) => {
   }
 });
 
-// 5. Buyurtma berish
 app.post('/api/orders', (req, res) => {
   const { userId, gameId, type, packageIndex, playerId } = req.body;
   const db = readDb();
@@ -162,7 +162,6 @@ app.post('/api/orders', (req, res) => {
     return res.json({ ok: false, error: 'Balans yetarli emas' });
   }
 
-  // Balansni ayirish
   user.balance -= pkg.price;
 
   const order = {
@@ -180,17 +179,15 @@ app.post('/api/orders', (req, res) => {
   db.orders.unshift(order);
   writeDb(db);
 
-  // Adminga telegram orqali xabar yuborish
   bot.telegram.sendMessage(
     ADMIN_ID,
-    `📥 **Yangi buyurtma!**\n\n O'yin: ${game.name}\n Paket: ${pkg.amt}\n Narxi: ${pkg.price} so'm\n Player ID: \`${playerId}\`\n User: ${userId}`,
+    `📥 **Yangi buyurtma!**\n\nO'yin: ${game.name}\nPaket: ${pkg.amt}\nNarxi: ${pkg.price} so'm\nPlayer ID: \`${playerId}\`\nUser: ${userId}`,
     { parse_mode: 'Markdown' }
   ).catch(() => {});
 
   res.json({ ok: true, balance: user.balance, order });
 });
 
-// 6. Buyurtmalar va Referal
 app.get('/api/orders/:userId', (req, res) => {
   const db = readDb();
   const userOrders = db.orders.filter(o => String(o.userId) === String(req.params.userId));
@@ -211,13 +208,12 @@ app.get('/api/referral/:userId', (req, res) => {
 app.post('/api/reviews', (req, res) => {
   const { name, stars, text } = req.body;
   const db = readDb();
-  const newReview = { name: name || 'Mijoz', stars: stars || 5, text: text || 'A'lo xizmat!' };
+  const newReview = { name: name || 'Mijoz', stars: stars || 5, text: text || 'A\'lo xizmat!' };
   db.config.reviews.unshift(newReview);
   writeDb(db);
   res.json({ review: newReview });
 });
 
-// SERVERNI ISHGA TUSHRISH
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log(`✅ Server ${PORT}-portda ishga tushdi`);
