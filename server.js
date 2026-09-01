@@ -77,16 +77,17 @@ app.post('/api/check-id', async (req, res) => {
 });
 
 // =========================================================
-// SMS WEBHOOK — AVTO-TASDIQLASH
+// SMS WEBHOOK — AVTO-TASDIQLASH (PHONE + AMOUNT REPAIR)
 // =========================================================
 const SMS_SECRET_KEY = process.env.SMS_SECRET || 'zohirbek0022';
 
 app.post('/api/sms-receiver', async (req, res) => {
   try {
     const rawMessage = req.body.message || req.body.body || req.body.text || JSON.stringify(req.body);
+    const phone = req.body.phone || req.body.from || '';
     const secret = req.body.secret || req.headers['x-secret'];
 
-    console.log('📩 [SMS KELDI]:', rawMessage);
+    console.log('📩 [SMS KELDI]:', rawMessage, 'Phone:', phone);
 
     if (secret && secret !== SMS_SECRET_KEY) {
       console.warn('⚠️ [SMS] Noto\'g\'ri secret key');
@@ -111,18 +112,30 @@ app.post('/api/sms-receiver', async (req, res) => {
       return res.status(200).json({ success: true, message: 'Summa topilmadi' });
     }
 
-    console.log(`💰 [SMS PARSED] Summa: ${amount} so'm`);
+    console.log(`💰 [SMS PARSED] Summa: ${amount} so'm, Phone: ${phone}`);
 
     let confirmedDeposit = null;
 
     updateDb((db) => {
-      const dep = db.deposits.find(d => d.status === 'pending' && Number(d.amount) === amount);
-      if (dep) {
-        dep.status = 'confirmed';
-        dep.confirmedAt = new Date().toISOString();
-        const user = getUser(db, dep.userId);
+      // 1. Agar Telefon raqam yuborilgan bo'lsa, mos user va summani qidiradi
+      if (phone) {
+        const cleanPhone = String(phone).replace(/\D/g, '').slice(-9);
+        confirmedDeposit = db.deposits.find(d => {
+          const userMatch = String(d.userId).includes(cleanPhone);
+          return d.status === 'pending' && Number(d.amount) === amount && userMatch;
+        });
+      }
+
+      // 2. Telefon raqam bo'lmasa yoki topilmasa, summa bo'yicha pending depozitni oladi
+      if (!confirmedDeposit) {
+        confirmedDeposit = db.deposits.find(d => d.status === 'pending' && Number(d.amount) === amount);
+      }
+
+      if (confirmedDeposit) {
+        confirmedDeposit.status = 'confirmed';
+        confirmedDeposit.confirmedAt = new Date().toISOString();
+        const user = getUser(db, confirmedDeposit.userId);
         user.balance = Number(user.balance || 0) + amount;
-        confirmedDeposit = dep;
       }
     });
 
@@ -142,7 +155,7 @@ app.post('/api/sms-receiver', async (req, res) => {
       if (bot && process.env.OWNER_CHAT_ID) {
         bot.sendMessage(
           process.env.OWNER_CHAT_ID,
-          `📱 **SMS tushdi, lekin mos depozit topilmadi:**\n\n💰 Summa: **${amount.toLocaleString('uz-UZ')} so'm**\n📝 Matn: \`${rawMessage.slice(0, 150)}\``,
+          `📱 **SMS tushdi, lekin mos depozit topilmadi:**\n\n💰 Summa: **${amount.toLocaleString('uz-UZ')} so'm**\n📱 Phone: \`${phone}\`\n📝 Matn: \`${rawMessage.slice(0, 150)}\``,
           { parse_mode: 'Markdown' }
         ).catch(() => {});
       }
@@ -150,7 +163,7 @@ app.post('/api/sms-receiver', async (req, res) => {
     }
 
   } catch (err) {
-    console.error('[SMS ERROR]:', err);
+    console.error('❌ [SMS ERROR]:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
