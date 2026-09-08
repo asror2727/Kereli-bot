@@ -1,74 +1,91 @@
+const path = require('path');
 const fs = require('fs');
-const path = path = require('path');
+const { nanoid } = require('nanoid');
 
-const DB_PATH = path.join(__dirname, '..', 'data', 'db.json');
+// Data papkasini ko'rsatish
+const dataDir = path.join(__dirname, '..', 'data');
+if (!fs.existsSync(dataDir)) {
+  fs.mkdirSync(dataDir, { recursive: true });
+}
 
-const DEFAULT_DB = {
-  splashLogo: null,
+// JSON baza fayli manzili
+const dbPath = path.join(dataDir, 'db.json');
+
+// Baza bo'sh bo'lganda boshlang'ich ma'lumotlar
+const defaultDb = {
+  splashLogo: '/uploads/default-logo.jpg',
   musicUrl: null,
   banners: [null, null, null],
   games: [],
   topUsers: [],
-  reviews: [
-    { name: 'Sardor_Gamer', stars: 5, text: "UC juda tez tushdi, raxmat!" }
-  ],
-  orders: [],
-  orderCounter: 67000,
-  deposits: [],
+  reviews: [],
   users: {},
+  orders: [],
+  deposits: [],
   admins: [],
-  botStarted: false
+  orderCounter: 1000
 };
 
-function ensureDb() {
-  if (!fs.existsSync(path.dirname(DB_PATH))) {
-    fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-  }
-  if (!fs.existsSync(DB_PATH)) {
-    fs.writeFileSync(DB_PATH, JSON.stringify(DEFAULT_DB, null, 2));
-  }
-}
-
+// Bazani o'qish funksiyasi
 function readDb() {
-  ensureDb();
   try {
-    const raw = fs.readFileSync(DB_PATH, 'utf-8');
-    return { ...DEFAULT_DB, ...JSON.parse(raw) };
-  } catch (e) {
-    console.error('db.json buzilgan, standart qiymatlar bilan tiklandi:', e);
-    return { ...DEFAULT_DB };
+    if (!fs.existsSync(dbPath)) {
+      fs.writeFileSync(dbPath, JSON.stringify(defaultDb, null, 2), 'utf8');
+      return { ...defaultDb };
+    }
+    const raw = fs.readFileSync(dbPath, 'utf8');
+    return JSON.parse(raw);
+  } catch (err) {
+    console.error('❌ DB o\'qishda xatolik:', err);
+    return { ...defaultDb };
   }
 }
 
+// Bazaga yozish funksiyasi
 function writeDb(data) {
-  ensureDb();
-  fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
+  try {
+    fs.writeFileSync(dbPath, JSON.stringify(data, null, 2), 'utf8');
+  } catch (err) {
+    console.error('❌ DB saqlashda xatolik:', err);
+  }
 }
 
-function updateDb(mutatorFn) {
+// Bazani yangilash xavfsiz funksiyasi
+function updateDb(fn) {
   const db = readDb();
-  const result = mutatorFn(db);
+  fn(db);
   writeDb(db);
-  return result !== undefined ? result : db;
+  return db;
 }
 
+// Foydalanuvchini olish yoki yangi yaratish
 function getUser(db, userId) {
   const idStr = String(userId);
   if (!db.users[idStr]) {
     db.users[idStr] = {
       balance: 0,
-      refCode: 'FLAY-' + idStr.slice(-6),
+      refCode: nanoid(6),
       referredBy: null,
       refCount: 0,
-      refEarned: 0
+      refEarned: 0,
+      name: `User ${idStr}`
     };
   }
   return db.users[idStr];
 }
 
+// Keyingi buyurtma raqamini generatsiya qilish
 function nextOrderNumber(db) {
-  db.orderCounter = (db.orderCounter || 67000) + 1;
+  if (!db.orderCounter) db.orderCounter = 1000;
+  db.orderCounter += 1;
   return db.orderCounter;
 }
 
-module.exports = { readDb, writeDb, updateDb, getUser, nextOrderNumber, DB_PATH };
+module.exports = {
+  readDb,
+  writeDb,
+  updateDb,
+  getUser,
+  nextOrderNumber
+};
+  
