@@ -39,7 +39,7 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-// 🏆 Top 10 xaridorlarni to'liq barcha kalitlar va buyurtma soni bilan hisoblash
+// 🏆 TOP 10 XARIDORLARNI ANIQ VA HAR XIL KALIT BILDIRISHLARI BILAN HISOBLASH
 function recalculateTopUsers(db) {
   const userTotals = {};
 
@@ -47,7 +47,7 @@ function recalculateTopUsers(db) {
     db.orders.forEach((o) => {
       if (o && o.status !== 'rejected' && o.status !== 'cancelled') {
         const uId = String(o.userId || '0');
-        const uName = o.userName || (db.users[uId] && db.users[uId].name) || `Foydalanuvchi (${uId})`;
+        const uName = o.userName || (db.users[uId] && db.users[uId].name) || `User ${uId}`;
         
         if (!userTotals[uId]) {
           userTotals[uId] = { name: uName, totalSpent: 0, ordersCount: 0 };
@@ -62,13 +62,15 @@ function recalculateTopUsers(db) {
     .sort((a, b) => b.totalSpent - a.totalSpent)
     .slice(0, 10);
 
-  // Frontend xohlagan har qanday kalit nomi bo'yicha ma'lumot uzatiladi
+  // Frontend xohlagan barcha nomlar orqali qaytariladi (undefined chiqqan kalitlar tuzatildi)
   db.topUsers = sorted.map((u, index) => {
     const formattedPrice = `${u.totalSpent.toLocaleString('uz-UZ')} so'm`;
     return {
       rank: index + 1,
+      rankNo: index + 1,
       id: index + 1,
-      name: u.name || 'Noma\'lum',
+      name: u.name || 'Foydalanuvchi',
+      userName: u.name || 'Foydalanuvchi',
       spent: formattedPrice,
       totalSpent: u.totalSpent,
       amount: formattedPrice,
@@ -91,7 +93,7 @@ app.post('/api/admin/login', (req, res) => {
 app.get('/api/config', (req, res) => {
   const db = readDb();
   
-  // Har doim TOP xaridorlar ro'yxatini yangilab javob qaytarish
+  // Ma'lumotlarni har doim TOP 10 ga moslab yangilash
   updateDb((d) => recalculateTopUsers(d));
   
   const freshDb = readDb();
@@ -181,7 +183,7 @@ app.post('/api/p2p-check', (req, res) => {
   }
 });
 
-// 📦 BUYURTMA YARATISH
+// 📦 BUYURTMA YARATISH VA TOP XARIDORLARNI AUTO-YANGILASH
 app.post('/api/orders', async (req, res) => {
   const { userId, userName, gameId, type, packageIndex, playerId } = req.body;
   const db = readDb();
@@ -267,7 +269,7 @@ app.get('/api/deposits/:id', (req, res) => {
   res.json({ ok: true, deposit });
 });
 
-// ✍️ IZOH QOLDIRISH (Nik va foydalanuvchi ismini qat'iy aniqlash)
+// ✍️ IZOH QOLDIRISH (FOYDALANUVCHINING ISMINI ANIQ SAQLASH)
 app.post('/api/reviews', (req, res) => {
   const { userId, userName, name, nick, nickname, stars, text } = req.body;
   const dbTemp = readDb();
@@ -277,7 +279,6 @@ app.post('/api/reviews', (req, res) => {
   if (authorName && authorName.trim()) {
     authorName = authorName.trim();
   } else if (userId) {
-    // Agar frontend nikni yubormasa, bazadagi ma'lumotlaridan izlash
     const u = dbTemp.users[String(userId)];
     const lastOrder = dbTemp.orders.find(o => String(o.userId) === String(userId) && o.userName);
     
