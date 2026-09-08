@@ -39,7 +39,7 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-// 🏆 Top 10 xaridorlarni xatosiz va to'liq formatda hisoblash
+// 🏆 Top 10 xaridorlarni to'liq barcha kalitlar va buyurtma soni bilan hisoblash
 function recalculateTopUsers(db) {
   const userTotals = {};
 
@@ -47,11 +47,13 @@ function recalculateTopUsers(db) {
     db.orders.forEach((o) => {
       if (o && o.status !== 'rejected' && o.status !== 'cancelled') {
         const uId = String(o.userId || '0');
-        const uName = o.userName || `Foydalanuvchi (${uId})`;
+        const uName = o.userName || (db.users[uId] && db.users[uId].name) || `Foydalanuvchi (${uId})`;
+        
         if (!userTotals[uId]) {
-          userTotals[uId] = { name: uName, totalSpent: 0 };
+          userTotals[uId] = { name: uName, totalSpent: 0, ordersCount: 0 };
         }
         userTotals[uId].totalSpent += Number(o.price || 0);
+        userTotals[uId].ordersCount += 1;
       }
     });
   }
@@ -60,16 +62,22 @@ function recalculateTopUsers(db) {
     .sort((a, b) => b.totalSpent - a.totalSpent)
     .slice(0, 10);
 
-  // Frontend xohlagan barcha kalit variantlari kiritildi
-  db.topUsers = sorted.map((u, index) => ({
-    rank: index + 1,
-    id: index + 1,
-    name: u.name || 'Noma\'lum',
-    spent: u.totalSpent || 0,
-    totalSpent: u.totalSpent || 0,
-    amount: u.totalSpent || 0,
-    sum: u.totalSpent || 0
-  }));
+  // Frontend xohlagan har qanday kalit nomi bo'yicha ma'lumot uzatiladi
+  db.topUsers = sorted.map((u, index) => {
+    const formattedPrice = `${u.totalSpent.toLocaleString('uz-UZ')} so'm`;
+    return {
+      rank: index + 1,
+      id: index + 1,
+      name: u.name || 'Noma\'lum',
+      spent: formattedPrice,
+      totalSpent: u.totalSpent,
+      amount: formattedPrice,
+      sum: formattedPrice,
+      price: formattedPrice,
+      ordersCount: u.ordersCount,
+      count: u.ordersCount
+    };
+  });
 }
 
 app.post('/api/admin/login', (req, res) => {
@@ -83,10 +91,8 @@ app.post('/api/admin/login', (req, res) => {
 app.get('/api/config', (req, res) => {
   const db = readDb();
   
-  // Eski ma'lumotlar buzilgan bo'lsa darhol to'g'irlash
-  if (!db.topUsers || !Array.isArray(db.topUsers) || (db.topUsers.length > 0 && db.topUsers[0].rank === undefined)) {
-    updateDb((d) => recalculateTopUsers(d));
-  }
+  // Har doim TOP xaridorlar ro'yxatini yangilab javob qaytarish
+  updateDb((d) => recalculateTopUsers(d));
   
   const freshDb = readDb();
   res.json({
@@ -261,20 +267,29 @@ app.get('/api/deposits/:id', (req, res) => {
   res.json({ ok: true, deposit });
 });
 
-// ✍️ IZOH QOLDIRISH
+// ✍️ IZOH QOLDIRISH (Nik va foydalanuvchi ismini qat'iy aniqlash)
 app.post('/api/reviews', (req, res) => {
-  const { userId, userName, name, stars, text } = req.body;
+  const { userId, userName, name, nick, nickname, stars, text } = req.body;
+  const dbTemp = readDb();
   
-  let authorName = 'Foydalanuvchi';
-  if (userName && userName.trim()) {
-    authorName = userName.trim();
-  } else if (name && name.trim()) {
-    authorName = name.trim();
+  let authorName = userName || name || nick || nickname;
+
+  if (authorName && authorName.trim()) {
+    authorName = authorName.trim();
   } else if (userId) {
-    const dbTemp = readDb();
+    // Agar frontend nikni yubormasa, bazadagi ma'lumotlaridan izlash
     const u = dbTemp.users[String(userId)];
-    if (u && u.name) authorName = u.name;
-    else authorName = `User ${userId}`;
+    const lastOrder = dbTemp.orders.find(o => String(o.userId) === String(userId) && o.userName);
+    
+    if (lastOrder && lastOrder.userName) {
+      authorName = lastOrder.userName;
+    } else if (u && u.name && !u.name.startsWith('User ')) {
+      authorName = u.name;
+    } else {
+      authorName = `User ${userId}`;
+    }
+  } else {
+    authorName = 'Foydalanuvchi';
   }
 
   const review = {
