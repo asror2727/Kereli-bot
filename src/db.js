@@ -13,7 +13,8 @@ const defaultDb = {
   splashLogo: '/uploads/default-logo.jpg',
   musicUrl: null,
   banners: [null, null, null],
-  games: [],
+  games: [],     // { id: 'game_1', name: 'PUBG Mobile', icon: '🎮' }
+  packages: [],  // { id: 'pkg_1', gameId: 'game_1', currencyName: 'UC', amount: 60, price: 12000, icon: '💎' }
   topUsers: [],
   reviews: [],
   users: {},
@@ -46,7 +47,6 @@ function calculateTopUsers(db) {
     .sort((a, b) => b.totalSpent - a.totalSpent)
     .slice(0, 10);
 
-  // Agarda buyurtmalar hali yo'q bo me'yoriy bo'sh xabar bermaslik uchun
   return sorted.map((u, index) => {
     const formattedPrice = `${u.totalSpent.toLocaleString('uz-UZ')} so'm`;
     return {
@@ -75,7 +75,9 @@ function readDb() {
     const raw = fs.readFileSync(dbPath, 'utf8');
     const parsed = JSON.parse(raw);
     
-    // Har o'qilganda TOP foydalanuvchilarni xatolarsiz qayta hisoblaydi
+    // Agarda eski bazada packages massivi bo'lmasa, qo'shib qo'yamiz
+    if (!parsed.packages) parsed.packages = [];
+
     parsed.topUsers = calculateTopUsers(parsed);
     return parsed;
   } catch (err) {
@@ -121,11 +123,47 @@ function nextOrderNumber(db) {
   return db.orderCounter;
 }
 
+// ---------------------------------------------------------
+// O'YIN VA PAKETLAR BILAN ISHLASH FUNKSIYALARI
+// ---------------------------------------------------------
+
+// 1. Yangi paket qo'shish (gameId va currencyName bilan)
+function addPackage(gameId, currencyName, amount, price, icon) {
+  return updateDb((db) => {
+    const newPkg = {
+      id: nanoid(8),
+      gameId,         // Masalan: "pubg_mobile"
+      currencyName,   // Masalan: "UC", "Gold", "Diamonds", "BP"
+      amount: Number(amount),
+      price: Number(price),
+      icon: icon || '💎',
+      createdAt: new Date().toISOString()
+    };
+    db.packages.push(newPkg);
+  });
+}
+
+// 2. Qaysidir o'yinga tegishli paketlarni olish
+function getPackagesByGame(gameId) {
+  const db = readDb();
+  return db.packages.filter((pkg) => pkg.gameId === gameId);
+}
+
+// 3. Paketni o'chirish
+function deletePackage(packageId) {
+  return updateDb((db) => {
+    db.packages = db.packages.filter((pkg) => pkg.id !== packageId);
+  });
+}
+
 module.exports = {
   readDb,
   writeDb,
   updateDb,
   getUser,
   nextOrderNumber,
-  calculateTopUsers
+  calculateTopUsers,
+  addPackage,
+  getPackagesByGame,
+  deletePackage
 };
