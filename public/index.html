@@ -83,6 +83,8 @@
     .quick-chips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
     .chip { background: var(--card-bg); border: 1px solid rgba(255, 255, 255, 0.08); padding: 10px 0; border-radius: 10px; text-align: center; font-size: 13px; font-weight: 700; cursor: pointer; }
     .chip.sel { border-color: var(--fire-orange); color: var(--fire-orange); }
+    .promo-chip { background: rgba(255,170,0,0.1); border: 1px dashed var(--fire-yellow); color: var(--fire-yellow); border-radius: 10px; padding: 8px 12px; font-size: 12px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; margin-right: 6px; margin-bottom: 6px; }
+    .promo-chip:hover { background: rgba(255,170,0,0.25); }
     .steps-box { background: var(--card-bg); border-radius: 16px; padding: 16px; margin-top: 16px; }
     .step-item { display: flex; gap: 12px; margin-bottom: 12px; font-size: 13px; color: var(--text-sub); }
     .step-num { background: rgba(255, 69, 0, 0.2); color: var(--fire-orange); width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0; }
@@ -346,6 +348,16 @@
         </div>
         <div class="check-result" id="checkResult"></div>
       </div>
+
+      <!-- TAYYOR PROMOCHIPLAR BO'LIMI -->
+      <div style="margin: 12px 0;">
+        <div style="font-size:12px; color:var(--text-sub); margin-bottom:6px;"><i class="fa-solid fa-ticket" style="color:var(--fire-yellow)"></i> Promokodlar:</div>
+        <div id="promoChipsBox">
+          <div class="promo-chip" onclick="applyPromoChip('FLAYPAY5')"><i class="fa-solid fa-tag"></i> FLAYPAY5 (-5%)</div>
+          <div class="promo-chip" onclick="applyPromoChip('BONUS2026')"><i class="fa-solid fa-gift"></i> BONUS2026</div>
+        </div>
+      </div>
+
       <div style="font-size:13px; font-weight:700; margin:14px 0 4px;">Paketni tanlang</div>
       <div class="pkg-grid" id="pkgGrid"></div>
     </div>
@@ -395,7 +407,7 @@
     }
 
     let CONFIG = { splashLogo: null, banners: [null,null,null], games: [], topUsers: [], reviews: [] };
-    let state = { balance: 0, currentGameId: null, currentType: 'uc', selectedPkgIdx: null, payAmount: 50000, currentDepositId: null };
+    let state = { balance: 0, currentGameId: null, currentType: 'uc', selectedPkgIdx: null, payAmount: 50000, currentDepositId: null, activePromo: null };
     let depositPollTimer = null;
 
     async function api(path, opts = {}) {
@@ -548,6 +560,7 @@
             <span style="color:${o.status === 'done' ? '#00b894' : '#ffaa00'};">${o.status === 'done' ? 'Bajarildi' : 'Kutilmoqda'}</span>
           </div>
           <div style="font-size:11px; color:var(--text-sub); margin-top:4px;">#${o.number} · ${o.price.toLocaleString('uz-UZ')} so'm</div>
+          ${o.promoCode ? `<div style="font-size:11px; color:var(--fire-yellow); margin-top:4px;">🎟 Promokod: ${o.promoCode}</div>` : ''}
         </div>`).join('');
     }
 
@@ -590,6 +603,11 @@
       document.getElementById('depAmount').value = val;
       document.querySelectorAll('.chip').forEach(c => c.classList.remove('sel'));
       el.classList.add('sel');
+    }
+
+    function applyPromoChip(code) {
+      state.activePromo = code;
+      alert(`🎟 Promokod tanlandi: ${code}`);
     }
 
     let payTimerInterval = null;
@@ -664,6 +682,7 @@
       state.currentGameId = gameId;
       state.currentType = 'uc';
       state.selectedPkgIdx = null;
+      state.activePromo = null;
       document.getElementById('gameHero').style.backgroundImage = `url('${game.image || ''}')`;
       document.getElementById('gameTitle').textContent = game.name;
       document.getElementById('gameRating').textContent = game.rating || '—';
@@ -720,7 +739,14 @@
       if (state.selectedPkgIdx === null) { alert("Paket tanlang"); return; }
       const res = await api('/api/orders', {
         method: 'POST',
-        body: JSON.stringify({ userId: USER_ID, gameId: state.currentGameId, type: state.currentType, packageIndex: state.selectedPkgIdx, playerId: document.getElementById('playerIdInput').value.trim() })
+        body: JSON.stringify({ 
+          userId: USER_ID, 
+          gameId: state.currentGameId, 
+          type: state.currentType, 
+          packageIndex: state.selectedPkgIdx, 
+          playerId: document.getElementById('playerIdInput').value.trim(),
+          promoCode: state.activePromo
+        })
       });
       if (!res.ok) { alert(res.error || 'Xatolar yuz berdi'); return; }
       state.balance = res.balance;
