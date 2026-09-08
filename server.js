@@ -31,7 +31,6 @@ const upload = multer({ storage, limits: { fileSize: 8 * 1024 * 1024 } });
 
 const bot = initBot();
 
-// ADMIN AUTH
 function requireAdmin(req, res, next) {
   const token = req.headers['x-admin-token'];
   if (!token || token !== process.env.ADMIN_PASSWORD) {
@@ -48,7 +47,6 @@ app.post('/api/admin/login', (req, res) => {
   res.status(401).json({ ok: false, error: "Parol noto'g'ri" });
 });
 
-// PUBLIC CONFIG
 app.get('/api/config', (req, res) => {
   const db = readDb();
   res.json({
@@ -61,14 +59,12 @@ app.get('/api/config', (req, res) => {
   });
 });
 
-// USER / BALANCE
 app.get('/api/user/:id', (req, res) => {
   const db = readDb();
   const user = getUser(db, req.params.id);
   res.json({ ok: true, user });
 });
 
-// ID TEKSHIRISH
 app.post('/api/check-id', async (req, res) => {
   const { playerId } = req.body;
   if (!playerId) return res.status(400).json({ ok: false, error: 'ID kiritilmagan' });
@@ -76,9 +72,6 @@ app.post('/api/check-id', async (req, res) => {
   res.json({ ok: true, found, nickname: null, fallback: true });
 });
 
-// =========================================================
-// SMS WEBHOOK — AVTO-TASDIQLASH (PHONE + AMOUNT REPAIR)
-// =========================================================
 const SMS_SECRET_KEY = process.env.SMS_SECRET || 'zohirbek0022';
 
 app.post('/api/sms-receiver', async (req, res) => {
@@ -117,7 +110,6 @@ app.post('/api/sms-receiver', async (req, res) => {
     let confirmedDeposit = null;
 
     updateDb((db) => {
-      // 1. Agar Telefon raqam yuborilgan bo'lsa, mos user va summani qidiradi
       if (phone) {
         const cleanPhone = String(phone).replace(/\D/g, '').slice(-9);
         confirmedDeposit = db.deposits.find(d => {
@@ -126,7 +118,6 @@ app.post('/api/sms-receiver', async (req, res) => {
         });
       }
 
-      // 2. Telefon raqam bo'lmasa yoki topilmasa, summa bo'yicha pending depozitni oladi
       if (!confirmedDeposit) {
         confirmedDeposit = db.deposits.find(d => d.status === 'pending' && Number(d.amount) === amount);
       }
@@ -168,7 +159,6 @@ app.post('/api/sms-receiver', async (req, res) => {
   }
 });
 
-// P2P TO'LOV TEKSHIRISH
 app.post('/api/p2p-check', (req, res) => {
   const { phone } = req.body;
   if (!phone) return res.status(400).json({ ok: false, error: 'Telefon kiritilmagan' });
@@ -191,7 +181,6 @@ app.post('/api/p2p-check', (req, res) => {
   }
 });
 
-// BUYURTMA YARATISH
 app.post('/api/orders', async (req, res) => {
   const { userId, userName, gameId, type, packageIndex, playerId } = req.body;
   const db = readDb();
@@ -206,15 +195,17 @@ app.post('/api/orders', async (req, res) => {
   }
 
   const orderId = nanoid(10);
-  user.balance -= pkg.price;
-
   let order;
+
   updateDb((d) => {
+    const u = getUser(d, userId);
+    u.balance -= pkg.price;
+
     const number = nextOrderNumber(d);
     order = {
       id: orderId,
       number,
-      userId,
+      userId: String(userId),
       userName: userName || null,
       gameName: game.name,
       packageLabel: pkg.amt,
@@ -224,21 +215,20 @@ app.post('/api/orders', async (req, res) => {
       createdAt: new Date().toISOString()
     };
     d.orders.unshift(order);
-    getUser(d, userId).balance = user.balance;
   });
 
   if (bot && bot._sendOrderNotification) bot._sendOrderNotification(order);
 
-  res.json({ ok: true, order, balance: user.balance });
+  const updatedDb = readDb();
+  res.json({ ok: true, order, balance: getUser(updatedDb, userId).balance });
 });
 
 app.get('/api/orders/:userId', (req, res) => {
   const db = readDb();
-  const orders = db.orders.filter((o) => o.userId === req.params.userId);
+  const orders = db.orders.filter((o) => String(o.userId) === String(req.params.userId));
   res.json({ ok: true, orders });
 });
 
-// TO'LDIRISH (DEPOSIT)
 app.post('/api/deposits', (req, res) => {
   const { userId, amount, method } = req.body;
   if (!userId || !amount) return res.status(400).json({ ok: false, error: "Ma'lumot yetarli emas" });
@@ -260,6 +250,8 @@ app.post('/api/deposits', (req, res) => {
     getUser(db, userId);
   });
 
+  if (bot && bot._sendDepositNotification) bot._sendDepositNotification(deposit);
+
   res.json({ ok: true, deposit });
 });
 
@@ -270,7 +262,6 @@ app.get('/api/deposits/:id', (req, res) => {
   res.json({ ok: true, deposit });
 });
 
-// REVIEWS
 app.post('/api/reviews', (req, res) => {
   const { name, stars, text } = req.body;
   const review = { name: name || 'Mehmon', stars: Math.min(5, Math.max(1, Number(stars) || 5)), text: text || '' };
@@ -278,7 +269,6 @@ app.post('/api/reviews', (req, res) => {
   res.json({ ok: true, review });
 });
 
-// REFERRAL
 app.get('/api/referral/:userId', (req, res) => {
   const db = readDb();
   const user = getUser(db, req.params.userId);
@@ -287,7 +277,6 @@ app.get('/api/referral/:userId', (req, res) => {
   res.json({ ok: true, refCode: user.refCode, refLink, refCount: user.refCount, refEarned: user.refEarned });
 });
 
-// ADMIN PANEL ROUTES
 app.post('/api/admin/splash', requireAdmin, upload.single('logo'), (req, res) => {
   if (!req.file) return res.status(400).json({ ok: false, error: 'Fayl yo\'q' });
   const url = `/uploads/${req.file.filename}`;
