@@ -39,43 +39,37 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-// 🏆 Top 10 xaridorlarni avtomatik hisoblash (Frontend uchun barcha kalitlar bilan)
+// 🏆 Top 10 xaridorlarni xatosiz va to'liq formatda hisoblash
 function recalculateTopUsers(db) {
   const userTotals = {};
 
-  db.orders.forEach((o) => {
-    if (o.status !== 'rejected' && o.status !== 'cancelled') {
-      const uId = String(o.userId);
-      const uName = o.userName || `Foydalanuvchi (${uId})`;
-      if (!userTotals[uId]) {
-        userTotals[uId] = { name: uName, totalSpent: 0 };
+  if (Array.isArray(db.orders)) {
+    db.orders.forEach((o) => {
+      if (o && o.status !== 'rejected' && o.status !== 'cancelled') {
+        const uId = String(o.userId || '0');
+        const uName = o.userName || `Foydalanuvchi (${uId})`;
+        if (!userTotals[uId]) {
+          userTotals[uId] = { name: uName, totalSpent: 0 };
+        }
+        userTotals[uId].totalSpent += Number(o.price || 0);
       }
-      userTotals[uId].totalSpent += Number(o.price || 0);
-    }
-  });
+    });
+  }
 
   const sorted = Object.values(userTotals)
     .sort((a, b) => b.totalSpent - a.totalSpent)
     .slice(0, 10);
 
-  // Frontend xohlagan har qanday kalit nomi (spent, amount, sum, rank, rankNo) mos tushishi uchun:
+  // Frontend xohlagan barcha kalit variantlari kiritildi
   db.topUsers = sorted.map((u, index) => ({
     rank: index + 1,
     id: index + 1,
-    name: u.name,
-    spent: u.totalSpent,
-    totalSpent: u.totalSpent,
-    amount: u.totalSpent,
-    sum: u.totalSpent
+    name: u.name || 'Noma\'lum',
+    spent: u.totalSpent || 0,
+    totalSpent: u.totalSpent || 0,
+    amount: u.totalSpent || 0,
+    sum: u.totalSpent || 0
   }));
-}
-
-
-  const sorted = Object.values(userTotals)
-    .sort((a, b) => b.totalSpent - a.totalSpent)
-    .slice(0, 10);
-
-  db.topUsers = sorted;
 }
 
 app.post('/api/admin/login', (req, res) => {
@@ -88,13 +82,20 @@ app.post('/api/admin/login', (req, res) => {
 
 app.get('/api/config', (req, res) => {
   const db = readDb();
+  
+  // Eski ma'lumotlar buzilgan bo'lsa darhol to'g'irlash
+  if (!db.topUsers || !Array.isArray(db.topUsers) || (db.topUsers.length > 0 && db.topUsers[0].rank === undefined)) {
+    updateDb((d) => recalculateTopUsers(d));
+  }
+  
+  const freshDb = readDb();
   res.json({
-    splashLogo: db.splashLogo,
-    musicUrl: db.musicUrl,
-    banners: db.banners,
-    games: db.games,
-    topUsers: db.topUsers || [],
-    reviews: db.reviews || []
+    splashLogo: freshDb.splashLogo,
+    musicUrl: freshDb.musicUrl,
+    banners: freshDb.banners,
+    games: freshDb.games,
+    topUsers: freshDb.topUsers || [],
+    reviews: freshDb.reviews || []
   });
 });
 
@@ -174,7 +175,7 @@ app.post('/api/p2p-check', (req, res) => {
   }
 });
 
-// 📦 BUYURTMA YARATISH VA TOP 10 NI YANGILASH
+// 📦 BUYURTMA YARATISH
 app.post('/api/orders', async (req, res) => {
   const { userId, userName, gameId, type, packageIndex, playerId } = req.body;
   const db = readDb();
@@ -212,8 +213,6 @@ app.post('/api/orders', async (req, res) => {
       createdAt: new Date().toISOString()
     };
     d.orders.unshift(order);
-    
-    // Top 10 xaridorlarni avto yangilash
     recalculateTopUsers(d);
   });
 
@@ -262,7 +261,7 @@ app.get('/api/deposits/:id', (req, res) => {
   res.json({ ok: true, deposit });
 });
 
-// ✍️ IZOH QOLDIRISH (Foydalanuvchi ismi to'liq saqlanadi)
+// ✍️ IZOH QOLDIRISH
 app.post('/api/reviews', (req, res) => {
   const { userId, userName, name, stars, text } = req.body;
   
