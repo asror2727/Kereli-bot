@@ -16,7 +16,7 @@ function getBotUsername() { return botUsernameCache; }
 function initBot() {
   const token = process.env.BOT_TOKEN;
   if (!token || token === 'your_bot_token_here') {
-    console.warn('⚠️  BOT_TOKEN .env faylda yo\'q — bot ishga tushirilmadi.');
+    console.warn('⚠️ BOT_TOKEN .env faylda yo\'q — bot ishga tushirilmadi.');
     return null;
   }
 
@@ -63,9 +63,6 @@ function initBot() {
     return `/uploads/${filename}`;
   }
 
-  // =========================================================
-  // /start — FAQAT YANGI MATN VA TUGMALAR
-  // =========================================================
   bot.onText(/\/start(?:\s+(.+))?/, async (msg, match) => {
     const chatId = msg.chat.id;
     const refCode = match && match[1] ? match[1].trim() : null;
@@ -107,9 +104,6 @@ function initBot() {
     }
   });
 
-  // =========================================================
-  // /admin — ADMIN PANEL
-  // =========================================================
   bot.onText(/\/admin/, (msg) => {
     if (!isOwner(msg.chat.id)) {
       bot.sendMessage(msg.chat.id, 'Bu buyruq faqat admin uchun.');
@@ -130,9 +124,6 @@ function initBot() {
     editOrSend(chatId, editMessageId, text, rows);
   }
 
-  // =========================================================
-  // CALLBACK QUERY HANDLER
-  // =========================================================
   bot.on('callback_query', async (query) => {
     const chatId = query.message.chat.id;
     const msgId = query.message.message_id;
@@ -462,9 +453,6 @@ function initBot() {
     }
   }
 
-  // =========================================================
-  // MESSAGE HANDLER
-  // =========================================================
   bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
 
