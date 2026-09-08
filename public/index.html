@@ -83,8 +83,6 @@
     .quick-chips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
     .chip { background: var(--card-bg); border: 1px solid rgba(255, 255, 255, 0.08); padding: 10px 0; border-radius: 10px; text-align: center; font-size: 13px; font-weight: 700; cursor: pointer; }
     .chip.sel { border-color: var(--fire-orange); color: var(--fire-orange); }
-    .promo-chip { background: rgba(255,170,0,0.1); border: 1px dashed var(--fire-yellow); color: var(--fire-yellow); border-radius: 10px; padding: 8px 12px; font-size: 12px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; margin-right: 6px; margin-bottom: 6px; }
-    .promo-chip:hover { background: rgba(255,170,0,0.25); }
     .steps-box { background: var(--card-bg); border-radius: 16px; padding: 16px; margin-top: 16px; }
     .step-item { display: flex; gap: 12px; margin-bottom: 12px; font-size: 13px; color: var(--text-sub); }
     .step-num { background: rgba(255, 69, 0, 0.2); color: var(--fire-orange); width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0; }
@@ -134,7 +132,7 @@
     .pkg-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
     .pkg-card { background: var(--card-bg); border: 2px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 16px 12px; text-align: center; cursor: pointer; position: relative; transition: all 0.3s ease; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
     .pkg-card.sel { border-color: var(--fire-orange); background: rgba(255,69,0,0.15); box-shadow: 0 0 20px rgba(255,69,0,0.3); }
-    .pkg-card .pkg-icon { font-size: 28px; margin-bottom: 8px; }
+    .pkg-card .pkg-icon { font-size: 28px; margin-bottom: 8px; display: flex; justify-content: center; align-items: center; min-height: 40px; }
     .pkg-card .pkg-icon img { width: 40px; height: 40px; object-fit: contain; margin: 0 auto; display: block; }
     .pkg-card .pkg-amt { font-weight: 800; font-size: 18px; color: #fff; margin-bottom: 4px; }
     .pkg-card .pkg-price { font-size: 14px; color: var(--fire-yellow); font-weight: 700; margin-top: 4px; }
@@ -348,16 +346,6 @@
         </div>
         <div class="check-result" id="checkResult"></div>
       </div>
-
-      <!-- TAYYOR PROMOCHIPLAR BO'LIMI -->
-      <div style="margin: 12px 0;">
-        <div style="font-size:12px; color:var(--text-sub); margin-bottom:6px;"><i class="fa-solid fa-ticket" style="color:var(--fire-yellow)"></i> Promokodlar:</div>
-        <div id="promoChipsBox">
-          <div class="promo-chip" onclick="applyPromoChip('FLAYPAY5')"><i class="fa-solid fa-tag"></i> FLAYPAY5 (-5%)</div>
-          <div class="promo-chip" onclick="applyPromoChip('BONUS2026')"><i class="fa-solid fa-gift"></i> BONUS2026</div>
-        </div>
-      </div>
-
       <div style="font-size:13px; font-weight:700; margin:14px 0 4px;">Paketni tanlang</div>
       <div class="pkg-grid" id="pkgGrid"></div>
     </div>
@@ -406,8 +394,8 @@
       localStorage.setItem('olovpay_demo_id', USER_ID);
     }
 
-    let CONFIG = { splashLogo: null, banners: [null,null,null], games: [], topUsers: [], reviews: [] };
-    let state = { balance: 0, currentGameId: null, currentType: 'uc', selectedPkgIdx: null, payAmount: 50000, currentDepositId: null, activePromo: null };
+    let CONFIG = { splashLogo: null, musicUrl: null, banners: [null,null,null], games: [], topUsers: [], reviews: [] };
+    let state = { balance: 0, currentGameId: null, currentType: 'uc', selectedPkgIdx: null, payAmount: 50000, currentDepositId: null, selectedPayMethod: 'uzcard' };
     let depositPollTimer = null;
 
     async function api(path, opts = {}) {
@@ -422,7 +410,7 @@
           api(`/api/user/${USER_ID}`)
         ]);
         CONFIG = configRes;
-        state.balance = userRes.user.balance;
+        state.balance = userRes.user ? userRes.user.balance : 0;
 
         if (CONFIG.splashLogo) {
           const logoImg = document.getElementById('splashLogo');
@@ -431,6 +419,11 @@
           logoImg.onerror = () => { logoImg.style.display = 'none'; fallbackEl.style.display = 'flex'; };
           logoImg.src = CONFIG.splashLogo;
           logoImg.style.display = 'block';
+        }
+
+        if (CONFIG.musicUrl) {
+          document.getElementById('bgMusicSource').src = CONFIG.musicUrl;
+          document.getElementById('bgMusic').load();
         }
 
         renderBanners();
@@ -471,7 +464,7 @@
       c.innerHTML = '';
       const dots = document.createElement('div');
       dots.className = 'banner-dots';
-      CONFIG.banners.forEach((b, i) => {
+      (CONFIG.banners || []).forEach((b, i) => {
         const slide = document.createElement('div');
         slide.className = 'banner-slide' + (i === 0 ? ' active' : '');
         if (b && b.image) {
@@ -487,6 +480,7 @@
       });
       c.appendChild(dots);
     }
+
     let bannerIdx = 0;
     function tickBanners() {
       const slides = document.querySelectorAll('.banner-slide');
@@ -501,7 +495,7 @@
 
     function renderGames() {
       const g = document.getElementById('gamesGrid');
-      if (!CONFIG.games.length) {
+      if (!CONFIG.games || !CONFIG.games.length) {
         g.innerHTML = `<div class="empty-hint" style="grid-column:1/-1;"><i class="fa-solid fa-gamepad"></i>O'yinlar topilmadi</div>`;
         return;
       }
@@ -515,7 +509,7 @@
 
     function renderReviews() {
       const box = document.getElementById('reviewsBox');
-      if (!CONFIG.reviews.length) { box.innerHTML = `<div class="empty-hint">Fikrlar mavjud emas</div>`; return; }
+      if (!CONFIG.reviews || !CONFIG.reviews.length) { box.innerHTML = `<div class="empty-hint">Fikrlar mavjud emas</div>`; return; }
       box.innerHTML = CONFIG.reviews.map((r, i) => `
         <div class="review-slide${i === 0 ? ' active' : ''}">
           <div class="stars">${'<i class="fa-solid fa-star"></i>'.repeat(r.stars)}</div>
@@ -524,6 +518,7 @@
         </div>
       `).join('');
     }
+
     let revIdx = 0;
     function tickReviews() {
       const slides = document.querySelectorAll('.review-slide');
@@ -535,7 +530,7 @@
 
     function renderTop() {
       const list = document.getElementById('topList');
-      if (!CONFIG.topUsers.length) { list.innerHTML = `<div class="empty-hint">Reyting bo'sh</div>`; return; }
+      if (!CONFIG.topUsers || !CONFIG.topUsers.length) { list.innerHTML = `<div class="empty-hint">Reyting bo'sh</div>`; return; }
       list.innerHTML = CONFIG.topUsers.map(u => `
         <div class="top-row">
           <div class="top-rank${u.medal ? ' medal' : ''}">${u.medal || '#' + u.rank}</div>
@@ -557,10 +552,9 @@
         <div style="background:var(--card-bg); padding:14px; border-radius:14px; border:1px solid rgba(255,255,255,0.05); margin-bottom:10px;">
           <div style="display:flex; justify-content:space-between; font-weight:700; font-size:14px;">
             <span>${o.packageLabel} (${o.gameName})</span>
-            <span style="color:${o.status === 'done' ? '#00b894' : '#ffaa00'};">${o.status === 'done' ? 'Bajarildi' : 'Kutilmoqda'}</span>
+            <span style="color:${o.status === 'done' ? '#00b894' : o.status === 'rejected' ? '#ff4757' : '#ffaa00'};">${o.status === 'done' ? 'Bajarildi' : o.status === 'rejected' ? 'Bekor qilindi' : 'Kutilmoqda'}</span>
           </div>
-          <div style="font-size:11px; color:var(--text-sub); margin-top:4px;">#${o.number} · ${o.price.toLocaleString('uz-UZ')} so'm</div>
-          ${o.promoCode ? `<div style="font-size:11px; color:var(--fire-yellow); margin-top:4px;">🎟 Promokod: ${o.promoCode}</div>` : ''}
+          <div style="font-size:11px; color:var(--text-sub); margin-top:4px;">#${o.number} · ${Number(o.price).toLocaleString('uz-UZ')} so'm</div>
         </div>`).join('');
     }
 
@@ -569,7 +563,7 @@
       document.getElementById('refCode').textContent = res.refLink || res.refCode;
       document.getElementById('refCode').dataset.value = res.refLink || res.refCode;
       document.getElementById('refCount').textContent = res.refCount;
-      document.getElementById('refEarned').textContent = res.refEarned.toLocaleString('uz-UZ');
+      document.getElementById('refEarned').textContent = Number(res.refEarned).toLocaleString('uz-UZ');
     }
 
     const navOrder = ['asosiy', 'toldirish', 'tarix', 'profil'];
@@ -596,18 +590,15 @@
     }
 
     function selectPay(which) {
+      state.selectedPayMethod = which;
       document.getElementById('payUzcard').classList.toggle('active', which === 'uzcard');
       document.getElementById('payHumo').classList.toggle('active', which === 'humo');
     }
+
     function setAmt(val, el) {
       document.getElementById('depAmount').value = val;
       document.querySelectorAll('.chip').forEach(c => c.classList.remove('sel'));
       el.classList.add('sel');
-    }
-
-    function applyPromoChip(code) {
-      state.activePromo = code;
-      alert(`🎟 Promokod tanlandi: ${code}`);
     }
 
     let payTimerInterval = null;
@@ -639,13 +630,17 @@
       }, 1000);
     }
 
-    function copyCard() { navigator.clipboard.writeText('6262910224120022'); alert("Karta nusxalandi!"); }
+    function copyCard() { 
+      const cardNum = document.getElementById('cardNumber').innerText.replace(/\s/g, '');
+      navigator.clipboard.writeText(cardNum); 
+      alert("Karta nusxalandi!"); 
+    }
 
     async function confirmPayment() {
       clearInterval(payTimerInterval);
       const res = await api('/api/deposits', {
         method: 'POST',
-        body: JSON.stringify({ userId: USER_ID, amount: state.payAmount, method: 'uzcard' })
+        body: JSON.stringify({ userId: USER_ID, amount: state.payAmount, method: state.selectedPayMethod })
       });
       state.currentDepositId = res.deposit ? res.deposit.id : null;
       switchPage('payconfirm');
@@ -682,7 +677,6 @@
       state.currentGameId = gameId;
       state.currentType = 'uc';
       state.selectedPkgIdx = null;
-      state.activePromo = null;
       document.getElementById('gameHero').style.backgroundImage = `url('${game.image || ''}')`;
       document.getElementById('gameTitle').textContent = game.name;
       document.getElementById('gameRating').textContent = game.rating || '—';
@@ -701,16 +695,21 @@
 
     function renderPackages() {
       const game = CONFIG.games.find(g => g.id === state.currentGameId);
-      const pkgs = (game.types[state.currentType] || []);
+      const pkgs = (game && game.types && game.types[state.currentType]) ? game.types[state.currentType] : [];
       const grid = document.getElementById('pkgGrid');
       if (!pkgs.length) { grid.innerHTML = `<div style="grid-column:1/-1;" class="empty-hint">Paketlar yo'q</div>`; return; }
-      grid.innerHTML = pkgs.map((p, i) => `
+      grid.innerHTML = pkgs.map((p, i) => {
+        const iconHtml = (p.icon && p.icon.startsWith('/uploads/')) 
+          ? `<img src="${p.icon}" alt="icon">` 
+          : (p.icon || '🪙');
+        return `
         <div class="pkg-card" data-i="${i}" onclick="selectPkg(${i})">
           <div class="pkg-check"><i class="fa-solid fa-check"></i></div>
-          <div class="pkg-icon">🪙</div>
+          <div class="pkg-icon">${iconHtml}</div>
           <div class="pkg-amt">${p.amt}</div>
           <div class="pkg-price">${Number(p.price).toLocaleString('uz-UZ')} so'm</div>
-        </div>`).join('');
+        </div>`;
+      }).join('');
     }
 
     function selectPkg(i) {
@@ -734,20 +733,24 @@
     }
 
     async function buyPackage() {
-      const resultEl = document.getElementById('checkResult');
-      if (!resultEl.classList.contains('ok')) { alert("Avval ID ni tekshiring"); return; }
+      const playerId = document.getElementById('playerIdInput').value.trim();
+      if (!playerId) { alert("Iltimos, o'yin ID raqamini kiriting"); return; }
       if (state.selectedPkgIdx === null) { alert("Paket tanlang"); return; }
+      
+      const userName = tgUser ? (tgUser.first_name + (tgUser.last_name ? ' ' + tgUser.last_name : '')) : 'Mehmon';
+      
       const res = await api('/api/orders', {
         method: 'POST',
         body: JSON.stringify({ 
           userId: USER_ID, 
+          userName: userName,
           gameId: state.currentGameId, 
           type: state.currentType, 
           packageIndex: state.selectedPkgIdx, 
-          playerId: document.getElementById('playerIdInput').value.trim(),
-          promoCode: state.activePromo
+          playerId: playerId 
         })
       });
+      
       if (!res.ok) { alert(res.error || 'Xatolar yuz berdi'); return; }
       state.balance = res.balance;
       updateBalanceUI();
@@ -756,7 +759,7 @@
     }
 
     function updateBalanceUI() {
-      const label = state.balance.toLocaleString('uz-UZ') + " so'm";
+      const label = Number(state.balance).toLocaleString('uz-UZ') + " so'm";
       document.getElementById('balanceVal').textContent = label;
       document.getElementById('balanceValProfile').textContent = label;
     }
@@ -768,17 +771,27 @@
       selectedStars = parseInt(star.dataset.v);
       document.querySelectorAll('#starRate i').forEach(s => s.classList.toggle('on', parseInt(s.dataset.v) <= selectedStars));
     });
+
     function openReviewModal() { document.getElementById('reviewModal').style.display = 'flex'; }
+    
     async function submitReview() {
-      if (!selectedStars) return;
-      const res = await api('/api/reviews', { method: 'POST', body: JSON.stringify({ name: 'Foydalanuvchi', stars: selectedStars, text: document.getElementById('reviewText').value }) });
-      CONFIG.reviews.unshift(res.review);
-      renderReviews();
+      if (!selectedStars) { alert("Yulduzcha tanlang!"); return; }
+      const userName = tgUser ? tgUser.first_name : 'Foydalanuvchi';
+      const res = await api('/api/reviews', { 
+        method: 'POST', 
+        body: JSON.stringify({ name: userName, stars: selectedStars, text: document.getElementById('reviewText').value }) 
+      });
+      if (res.review) {
+        if (!CONFIG.reviews) CONFIG.reviews = [];
+        CONFIG.reviews.unshift(res.review);
+        renderReviews();
+      }
       document.getElementById('reviewModal').style.display = 'none';
+      document.getElementById('reviewText').value = '';
     }
 
     function openSupport() { if (tg) tg.openTelegramLink('https://t.me/x7fan'); else window.open('https://t.me/x7fan', '_blank'); }
-    function openChannel() { if (tg) tg.openTelegramLink('https://t.me/flaypay1'); else window.open('https://t.me/arkootzif', '_blank'); }
+    function openChannel() { if (tg) tg.openTelegramLink('https://t.me/arkootzif'); else window.open('https://t.me/arkootzif', '_blank'); }
     function copyRef() { navigator.clipboard.writeText(document.getElementById('refCode').dataset.value); alert("Havola nusxalandi!"); }
 
     init();
