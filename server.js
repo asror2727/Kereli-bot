@@ -39,6 +39,29 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+// 🏆 Top 10 xaridorlarni avtomatik hisoblash funksiyasi
+function recalculateTopUsers(db) {
+  const userTotals = {};
+
+  // Faqat bajarilgan yoki muvaffaqiyatli buyurtmalar bo'yicha hisoblash
+  db.orders.forEach((o) => {
+    if (o.status !== 'rejected' && o.status !== 'cancelled') {
+      const uId = String(o.userId);
+      const uName = o.userName || `Foydalanuvchi (${uId})`;
+      if (!userTotals[uId]) {
+        userTotals[uId] = { name: uName, totalSpent: 0 };
+      }
+      userTotals[uId].totalSpent += Number(o.price || 0);
+    }
+  });
+
+  const sorted = Object.values(userTotals)
+    .sort((a, b) => b.totalSpent - a.totalSpent)
+    .slice(0, 10);
+
+  db.topUsers = sorted;
+}
+
 app.post('/api/admin/login', (req, res) => {
   const { password } = req.body;
   if (password === process.env.ADMIN_PASSWORD) {
@@ -54,8 +77,8 @@ app.get('/api/config', (req, res) => {
     musicUrl: db.musicUrl,
     banners: db.banners,
     games: db.games,
-    topUsers: db.topUsers,
-    reviews: db.reviews
+    topUsers: db.topUsers || [],
+    reviews: db.reviews || []
   });
 });
 
@@ -74,7 +97,6 @@ app.post('/api/check-id', async (req, res) => {
 
 const SMS_SECRET_KEY = process.env.SMS_SECRET || 'zohirbek0022';
 
-// 📩 SMS Receiver — FAQAT BILDIRISHNOMA (Balans avto to'lmaydi)
 app.post('/api/sms-receiver', async (req, res) => {
   try {
     const rawMessage = req.body.message || req.body.body || req.body.text || JSON.stringify(req.body);
@@ -136,7 +158,7 @@ app.post('/api/p2p-check', (req, res) => {
   }
 });
 
-// 📦 BUYURTMA YARATISH
+// 📦 BUYURTMA YARATISH VA TOP 10 NI YANGILASH
 app.post('/api/orders', async (req, res) => {
   const { userId, userName, gameId, type, packageIndex, playerId } = req.body;
   const db = readDb();
@@ -153,7 +175,7 @@ app.post('/api/orders', async (req, res) => {
   const orderId = nanoid(10);
   let order;
 
-  const finalUserName = (userName && userName.trim()) ? userName.trim() : (user.name || `Foydalanuvchi (${userId})`);
+  const finalUserName = (userName && userName.trim()) ? userName.trim() : (user.name || `User ${userId}`);
 
   updateDb((d) => {
     const u = getUser(d, userId);
@@ -174,6 +196,9 @@ app.post('/api/orders', async (req, res) => {
       createdAt: new Date().toISOString()
     };
     d.orders.unshift(order);
+    
+    // Top 10 xaridorlarni avto yangilash
+    recalculateTopUsers(d);
   });
 
   if (bot && bot._sendOrderNotification) bot._sendOrderNotification(order);
@@ -221,10 +246,36 @@ app.get('/api/deposits/:id', (req, res) => {
   res.json({ ok: true, deposit });
 });
 
+// ✍️ IZOH QOLDIRISH (Foydalanuvchi ismi to'liq saqlanadi)
 app.post('/api/reviews', (req, res) => {
-  const { name, stars, text } = req.body;
-  const review = { name: name || 'Mehmon', stars: Math.min(5, Math.max(1, Number(stars) || 5)), text: text || '' };
-  updateDb((db) => { db.reviews.unshift(review); db.reviews = db.reviews.slice(0, 30); });
+  const { userId, userName, name, stars, text } = req.body;
+  
+  let authorName = 'Foydalanuvchi';
+  if (userName && userName.trim()) {
+    authorName = userName.trim();
+  } else if (name && name.trim()) {
+    authorName = name.trim();
+  } else if (userId) {
+    const dbTemp = readDb();
+    const u = dbTemp.users[String(userId)];
+    if (u && u.name) authorName = u.name;
+    else authorName = `User ${userId}`;
+  }
+
+  const review = {
+    userId: userId ? String(userId) : null,
+    name: authorName,
+    stars: Math.min(5, Math.max(1, Number(stars) || 5)),
+    text: text || '',
+    createdAt: new Date().toISOString()
+  };
+
+  updateDb((db) => {
+    if (!db.reviews) db.reviews = [];
+    db.reviews.unshift(review);
+    db.reviews = db.reviews.slice(0, 30);
+  });
+
   res.json({ ok: true, review });
 });
 
@@ -344,7 +395,10 @@ app.post('/api/admin/orders/:id/status', requireAdmin, (req, res) => {
   const { status } = req.body;
   updateDb((db) => {
     const order = db.orders.find((o) => o.id === req.params.id);
-    if (order) order.status = status;
+    if (order) {
+      order.status = status;
+      recalculateTopUsers(db);
+    }
   });
   res.json({ ok: true });
 });
@@ -357,4 +411,3 @@ app.delete('/api/admin/reviews/:index', requireAdmin, (req, res) => {
 app.listen(PORT, () => {
   console.log(`✅ FlayPay server ${PORT}-portda ishga tushdi`);
 });
-
