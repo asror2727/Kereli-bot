@@ -24,7 +24,7 @@ function initBot() {
   bot.on('polling_error', (err) => console.error('Polling xatosi:', err.message));
   bot.getMe().then((me) => { botUsernameCache = me.username; }).catch(() => {});
 
-  const channel = process.env.CHANNEL_USERNAME || 'arkootzif';
+  const channel = process.env.CHANNEL_USERNAME || 'FlayFay1';
   const support = process.env.SUPPORT_USERNAME || 'x7fan';
   const ownerChatId = process.env.OWNER_CHAT_ID;
   const webAppUrl = process.env.WEBAPP_URL;
