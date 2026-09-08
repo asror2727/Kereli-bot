@@ -2,16 +2,13 @@ const path = require('path');
 const fs = require('fs');
 const { nanoid } = require('nanoid');
 
-// Data papkasini ko'rsatish
 const dataDir = path.join(__dirname, '..', 'data');
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
 
-// JSON baza fayli manzili
 const dbPath = path.join(dataDir, 'db.json');
 
-// Baza bo'sh bo'lganda boshlang'ich ma'lumotlar
 const defaultDb = {
   splashLogo: '/uploads/default-logo.jpg',
   musicUrl: null,
@@ -26,7 +23,6 @@ const defaultDb = {
   orderCounter: 1000
 };
 
-// Bazani o'qish funksiyasi
 function readDb() {
   try {
     if (!fs.existsSync(dbPath)) {
@@ -41,7 +37,6 @@ function readDb() {
   }
 }
 
-// Bazaga yozish funksiyasi
 function writeDb(data) {
   try {
     fs.writeFileSync(dbPath, JSON.stringify(data, null, 2), 'utf8');
@@ -50,7 +45,6 @@ function writeDb(data) {
   }
 }
 
-// Bazani yangilash xavfsiz funksiyasi
 function updateDb(fn) {
   const db = readDb();
   fn(db);
@@ -58,7 +52,6 @@ function updateDb(fn) {
   return db;
 }
 
-// Foydalanuvchini olish yoki yangi yaratish
 function getUser(db, userId) {
   const idStr = String(userId);
   if (!db.users[idStr]) {
@@ -74,7 +67,6 @@ function getUser(db, userId) {
   return db.users[idStr];
 }
 
-// Keyingi buyurtma raqamini generatsiya qilish
 function nextOrderNumber(db) {
   if (!db.orderCounter) db.orderCounter = 1000;
   db.orderCounter += 1;
@@ -88,4 +80,3 @@ module.exports = {
   getUser,
   nextOrderNumber
 };
-  
