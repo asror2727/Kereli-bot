@@ -66,9 +66,12 @@ function initBot() {
   bot.onText(/\/start(?:\s+(.+))?/, async (msg, match) => {
     const chatId = msg.chat.id;
     const refCode = match && match[1] ? match[1].trim() : null;
+    const fullName = `${msg.from.first_name || ''} ${msg.from.last_name || ''}`.trim() || msg.from.username || `User ${chatId}`;
 
     updateDb((db) => {
       const user = getUser(db, chatId);
+      user.name = fullName; // Foydalanuvchi ismini avto saqlash
+
       if (refCode && !user.referredBy && refCode !== user.refCode) {
         const referrer = Object.entries(db.users).find(([, u]) => u.refCode === refCode);
         if (referrer) {
@@ -337,12 +340,13 @@ function initBot() {
     }
   }
 
+  // 📋 PAKETLAR RO'YXATI (Emojilarni to'g'ri ko'rsatish)
   function handlePkgCallback(parts, chatId, msgId) {
     const action = parts[2];
     if (action === 'add') {
       const gameId = parts[3], type = parts[4];
       sessions.set(String(chatId), { step: 'pkg_icon', data: { gameId, type } });
-      editOrSend(chatId, msgId, `${type === 'uc' ? 'UC' : 'Prime'} paket uchun ikonka yuboring (Emoji yoki Rasm):`, [cancelRow]);
+      editOrSend(chatId, msgId, `${type === 'uc' ? 'UC' : 'Prime'} paket uchun ikonka yuboring (Emoji yozing yoki Rasm yuboring):`, [cancelRow]);
     }
     if (action === 'list') {
       const gameId = parts[3];
@@ -352,7 +356,8 @@ function initBot() {
       const rows = [];
       ['uc', 'prime'].forEach((type) => {
         (game.types[type] || []).forEach((p, idx) => {
-          const iconLabel = p.icon && p.icon.startsWith('/uploads/') ? '🖼' : p.icon;
+          // Emojini to'g'ri ko'rsatish logic
+          const iconLabel = (p.icon && p.icon.startsWith('/uploads/')) ? '🖼' : (p.icon || '🪙');
           rows.push([{ text: `${iconLabel} ${p.amt} — ${Number(p.price).toLocaleString('uz-UZ')} so'm`, callback_data: `adm|pkg|del|${gameId}|${type}|${idx}` }]);
         });
       });
@@ -393,7 +398,7 @@ function initBot() {
     }
     bot.editMessageText(`💰 *To'lovlar* — ${pending.length} ta kutilmoqda:`, { chat_id: chatId, message_id: msgId, parse_mode: 'Markdown' }).catch(() => {});
     pending.forEach((dep) => {
-      bot.sendMessage(chatId, `💰 ${Number(dep.amount).toLocaleString('uz-UZ')} so'm — ${dep.method.toUpperCase()}\nFoydalanuvchi: ${dep.userId}`, {
+      bot.sendMessage(chatId, `💰 ${Number(dep.amount).toLocaleString('uz-UZ')} so'm — ${dep.method.toUpperCase()}\nFoydalanuvchi ID: ${dep.userId}`, {
         reply_markup: { inline_keyboard: [[{ text: '✅ Tasdiqlash', callback_data: `dep_confirm_${dep.id}` }, { text: '❌ Bekor qilish', callback_data: `dep_reject_${dep.id}` }]] }
       });
     });
@@ -412,11 +417,17 @@ function initBot() {
     bot.sendMessage(chatId, 'Menyuga qaytish:', { reply_markup: { inline_keyboard: [[{ text: '⬅️ Bosh menyu', callback_data: 'adm|menu|main' }]] } });
   }
 
+  // 📦 ADMIN UCHUN BUYURTMA BILDIRISHNOMASI
   function sendOrderNotification(order) {
     const db = readDb();
-    const text = `📦 Buyurtma #${order.number}\n\n👤 Foydalanuvchi: ${order.userName || 'Nomsiz'}\n🆔 User ID: ${order.userId}\n🎮 O'yin: ${order.gameName}\n📦 Miqdor: ${order.packageLabel}\n🆔 O'yinchi ID: ${order.playerId}\n💰 Narx: ${Number(order.price).toLocaleString('uz-UZ')} so'm`;
+    const u = db.users[String(order.userId)];
+    const displayName = order.userName || (u && u.name) || `User ${order.userId}`;
+
+    const text = `📦 **Yangi Buyurtma** #${order.number}\n\n👤 **Xaridor:** ${displayName}\n🆔 **User ID:** \`${order.userId}\`\n🎮 **O'yin:** ${order.gameName}\n📦 **Miqdor:** ${order.packageLabel}\n🆔 **O'yinchi ID:** \`${order.playerId}\`\n💰 **Narx:** ${Number(order.price).toLocaleString('uz-UZ')} so'm`;
+    
     getAllAdminIds(db).forEach((adminId) => {
       bot.sendMessage(adminId, text, {
+        parse_mode: 'Markdown',
         reply_markup: { inline_keyboard: [[{ text: '✅ Tasdiqlash', callback_data: `ord_confirm_${order.id}` }, { text: '❌ Bekor qilish', callback_data: `ord_reject_${order.id}` }]] }
       }).catch(() => {});
     });
@@ -584,9 +595,10 @@ function initBot() {
 
   function sendDepositNotification(deposit) {
     const db = readDb();
-    const text = `💰 Yangi to'lov so'rovi\n\nFoydalanuvchi: ${deposit.userId}\nSumma: ${deposit.amount.toLocaleString('uz-UZ')} so'm`;
+    const text = `💰 **Yangi to'lov so'rovi (Ruchnoy)**\n\n🆔 Foydalanuvchi ID: \`${deposit.userId}\`\n💵 Summa: **${deposit.amount.toLocaleString('uz-UZ')} so'm**\n💳 Turi: ${deposit.method.toUpperCase()}`;
     getAllAdminIds(db).forEach((adminId) => {
       bot.sendMessage(adminId, text, {
+        parse_mode: 'Markdown',
         reply_markup: { inline_keyboard: [[{ text: '✅ Tasdiqlash', callback_data: `dep_confirm_${deposit.id}` }, { text: '❌ Bekor qilish', callback_data: `dep_reject_${deposit.id}` }]] }
       }).catch(() => {});
     });
