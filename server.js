@@ -39,11 +39,10 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-// 🏆 Top 10 xaridorlarni avtomatik hisoblash funksiyasi
+// 🏆 Top 10 xaridorlarni avtomatik hisoblash (Frontend uchun barcha kalitlar bilan)
 function recalculateTopUsers(db) {
   const userTotals = {};
 
-  // Faqat bajarilgan yoki muvaffaqiyatli buyurtmalar bo'yicha hisoblash
   db.orders.forEach((o) => {
     if (o.status !== 'rejected' && o.status !== 'cancelled') {
       const uId = String(o.userId);
@@ -54,6 +53,23 @@ function recalculateTopUsers(db) {
       userTotals[uId].totalSpent += Number(o.price || 0);
     }
   });
+
+  const sorted = Object.values(userTotals)
+    .sort((a, b) => b.totalSpent - a.totalSpent)
+    .slice(0, 10);
+
+  // Frontend xohlagan har qanday kalit nomi (spent, amount, sum, rank, rankNo) mos tushishi uchun:
+  db.topUsers = sorted.map((u, index) => ({
+    rank: index + 1,
+    id: index + 1,
+    name: u.name,
+    spent: u.totalSpent,
+    totalSpent: u.totalSpent,
+    amount: u.totalSpent,
+    sum: u.totalSpent
+  }));
+}
+
 
   const sorted = Object.values(userTotals)
     .sort((a, b) => b.totalSpent - a.totalSpent)
