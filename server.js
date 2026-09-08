@@ -39,49 +39,6 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-// 🏆 TOP 10 XARIDORLARNI ANIQ VA HAR XIL KALIT BILDIRISHLARI BILAN HISOBLASH
-function recalculateTopUsers(db) {
-  const userTotals = {};
-
-  if (Array.isArray(db.orders)) {
-    db.orders.forEach((o) => {
-      if (o && o.status !== 'rejected' && o.status !== 'cancelled') {
-        const uId = String(o.userId || '0');
-        const uName = o.userName || (db.users[uId] && db.users[uId].name) || `User ${uId}`;
-        
-        if (!userTotals[uId]) {
-          userTotals[uId] = { name: uName, totalSpent: 0, ordersCount: 0 };
-        }
-        userTotals[uId].totalSpent += Number(o.price || 0);
-        userTotals[uId].ordersCount += 1;
-      }
-    });
-  }
-
-  const sorted = Object.values(userTotals)
-    .sort((a, b) => b.totalSpent - a.totalSpent)
-    .slice(0, 10);
-
-  // Frontend xohlagan barcha nomlar orqali qaytariladi (undefined chiqqan kalitlar tuzatildi)
-  db.topUsers = sorted.map((u, index) => {
-    const formattedPrice = `${u.totalSpent.toLocaleString('uz-UZ')} so'm`;
-    return {
-      rank: index + 1,
-      rankNo: index + 1,
-      id: index + 1,
-      name: u.name || 'Foydalanuvchi',
-      userName: u.name || 'Foydalanuvchi',
-      spent: formattedPrice,
-      totalSpent: u.totalSpent,
-      amount: formattedPrice,
-      sum: formattedPrice,
-      price: formattedPrice,
-      ordersCount: u.ordersCount,
-      count: u.ordersCount
-    };
-  });
-}
-
 app.post('/api/admin/login', (req, res) => {
   const { password } = req.body;
   if (password === process.env.ADMIN_PASSWORD) {
@@ -91,11 +48,6 @@ app.post('/api/admin/login', (req, res) => {
 });
 
 app.get('/api/config', (req, res) => {
-  const db = readDb();
-  
-  // Ma'lumotlarni har doim TOP 10 ga moslab yangilash
-  updateDb((d) => recalculateTopUsers(d));
-  
   const freshDb = readDb();
   res.json({
     splashLogo: freshDb.splashLogo,
@@ -183,7 +135,7 @@ app.post('/api/p2p-check', (req, res) => {
   }
 });
 
-// 📦 BUYURTMA YARATISH VA TOP XARIDORLARNI AUTO-YANGILASH
+// 📦 BUYURTMA YARATISH
 app.post('/api/orders', async (req, res) => {
   const { userId, userName, gameId, type, packageIndex, playerId } = req.body;
   const db = readDb();
@@ -221,7 +173,6 @@ app.post('/api/orders', async (req, res) => {
       createdAt: new Date().toISOString()
     };
     d.orders.unshift(order);
-    recalculateTopUsers(d);
   });
 
   if (bot && bot._sendOrderNotification) bot._sendOrderNotification(order);
@@ -269,7 +220,7 @@ app.get('/api/deposits/:id', (req, res) => {
   res.json({ ok: true, deposit });
 });
 
-// ✍️ IZOH QOLDIRISH (FOYDALANUVCHINING ISMINI ANIQ SAQLASH)
+// ✍️ IZOH QOLDIRISH (FOYDALANUVCHINING ISMINI ANIQ ANIQLASH)
 app.post('/api/reviews', (req, res) => {
   const { userId, userName, name, nick, nickname, stars, text } = req.body;
   const dbTemp = readDb();
@@ -428,7 +379,6 @@ app.post('/api/admin/orders/:id/status', requireAdmin, (req, res) => {
     const order = db.orders.find((o) => o.id === req.params.id);
     if (order) {
       order.status = status;
-      recalculateTopUsers(db);
     }
   });
   res.json({ ok: true });
