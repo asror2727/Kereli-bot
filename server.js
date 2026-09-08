@@ -74,6 +74,7 @@ app.post('/api/check-id', async (req, res) => {
 
 const SMS_SECRET_KEY = process.env.SMS_SECRET || 'zohirbek0022';
 
+// 📩 SMS Receiver — FAQAT RUCHNOY (Avto-tasdiqlash olib tashlandi, faqat bildirishnoma yuboradi)
 app.post('/api/sms-receiver', async (req, res) => {
   try {
     const rawMessage = req.body.message || req.body.body || req.body.text || JSON.stringify(req.body);
@@ -83,7 +84,6 @@ app.post('/api/sms-receiver', async (req, res) => {
     console.log('📩 [SMS KELDI]:', rawMessage, 'Phone:', phone);
 
     if (secret && secret !== SMS_SECRET_KEY) {
-      console.warn('⚠️ [SMS] Noto\'g\'ri secret key');
       return res.status(403).json({ success: false, error: 'Invalid secret' });
     }
 
@@ -100,58 +100,16 @@ app.post('/api/sms-receiver', async (req, res) => {
       amount = parseInt(cleanNum, 10);
     }
 
-    if (!amount || amount < 100) {
-      console.log('⚠️ [SMS] Summa aniqlanmadi.');
-      return res.status(200).json({ success: true, message: 'Summa topilmadi' });
+    // Adminga SMS haqida xabar yuborish (Avto tasdiqlanmaydi, faqat ma'lumot)
+    if (bot && process.env.OWNER_CHAT_ID) {
+      bot.sendMessage(
+        process.env.OWNER_CHAT_ID,
+        `📩 **Yangi SMS Tushdi (To'lov)**\n\n💰 Summa: **${amount ? amount.toLocaleString('uz-UZ') : 'Noma\'lum'} so'm**\n📱 Tel: \`${phone}\`\n📝 Matn: \`${rawMessage.slice(0, 150)}\`\n\n⚠️ *To'lovni tasdiqlash uchun admin paneldan foydalaning!*`,
+        { parse_mode: 'Markdown' }
+      ).catch(() => {});
     }
 
-    console.log(`💰 [SMS PARSED] Summa: ${amount} so'm, Phone: ${phone}`);
-
-    let confirmedDeposit = null;
-
-    updateDb((db) => {
-      if (phone) {
-        const cleanPhone = String(phone).replace(/\D/g, '').slice(-9);
-        confirmedDeposit = db.deposits.find(d => {
-          const userMatch = String(d.userId).includes(cleanPhone);
-          return d.status === 'pending' && Number(d.amount) === amount && userMatch;
-        });
-      }
-
-      if (!confirmedDeposit) {
-        confirmedDeposit = db.deposits.find(d => d.status === 'pending' && Number(d.amount) === amount);
-      }
-
-      if (confirmedDeposit) {
-        confirmedDeposit.status = 'confirmed';
-        confirmedDeposit.confirmedAt = new Date().toISOString();
-        const user = getUser(db, confirmedDeposit.userId);
-        user.balance = Number(user.balance || 0) + amount;
-      }
-    });
-
-    if (confirmedDeposit) {
-      console.log(`✅ [SMS AUTO] To'lov avto-tasdiqlandi: User ${confirmedDeposit.userId} -> ${amount} so'm`);
-
-      if (bot) {
-        bot.sendMessage(
-          confirmedDeposit.userId,
-          `✅ **To'lov AVTOMATIK tasdiqlandi!**\n\n💰 **${amount.toLocaleString('uz-UZ')} so'm** balansingizga qo'shildi.\n🕐 Vaqt: ${new Date().toLocaleString('uz-UZ')}`,
-          { parse_mode: 'Markdown' }
-        ).catch(() => {});
-      }
-      return res.status(200).json({ success: true, message: 'To\'lov avto-tasdiqlandi' });
-    } else {
-      console.log('⚠️ [SMS] Kutilayotgan mos depozit topilmadi.');
-      if (bot && process.env.OWNER_CHAT_ID) {
-        bot.sendMessage(
-          process.env.OWNER_CHAT_ID,
-          `📱 **SMS tushdi, lekin mos depozit topilmadi:**\n\n💰 Summa: **${amount.toLocaleString('uz-UZ')} so'm**\n📱 Phone: \`${phone}\`\n📝 Matn: \`${rawMessage.slice(0, 150)}\``,
-          { parse_mode: 'Markdown' }
-        ).catch(() => {});
-      }
-      return res.status(200).json({ success: true, message: 'Kutilayotgan deposit topilmadi' });
-    }
+    return res.status(200).json({ success: true, message: 'SMS qabul qilindi' });
 
   } catch (err) {
     console.error('❌ [SMS ERROR]:', err);
@@ -181,6 +139,7 @@ app.post('/api/p2p-check', (req, res) => {
   }
 });
 
+// 📦 BUYURTMA YARATISH (Nomsiz bo'lmasligi uchun ismni saqlaydi)
 app.post('/api/orders', async (req, res) => {
   const { userId, userName, gameId, type, packageIndex, playerId } = req.body;
   const db = readDb();
@@ -197,16 +156,20 @@ app.post('/api/orders', async (req, res) => {
   const orderId = nanoid(10);
   let order;
 
+  // Ism bo'sh bo'lsa default ism beramiz
+  const finalUserName = (userName && userName.trim()) ? userName.trim() : `Foydalanuvchi (${userId})`;
+
   updateDb((d) => {
     const u = getUser(d, userId);
     u.balance -= pkg.price;
+    u.name = finalUserName; // foydalanuvchi ismini bazada ham yangilaymiz
 
     const number = nextOrderNumber(d);
     order = {
       id: orderId,
       number,
       userId: String(userId),
-      userName: userName || null,
+      userName: finalUserName,
       gameName: game.name,
       packageLabel: pkg.amt,
       price: pkg.price,
