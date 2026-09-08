@@ -74,14 +74,12 @@ app.post('/api/check-id', async (req, res) => {
 
 const SMS_SECRET_KEY = process.env.SMS_SECRET || 'zohirbek0022';
 
-// 📩 SMS Receiver — FAQAT RUCHNOY (Avto-tasdiqlash olib tashlandi, faqat bildirishnoma yuboradi)
+// 📩 SMS Receiver — FAQAT BILDIRISHNOMA (Balans avto to'lmaydi)
 app.post('/api/sms-receiver', async (req, res) => {
   try {
     const rawMessage = req.body.message || req.body.body || req.body.text || JSON.stringify(req.body);
     const phone = req.body.phone || req.body.from || '';
     const secret = req.body.secret || req.headers['x-secret'];
-
-    console.log('📩 [SMS KELDI]:', rawMessage, 'Phone:', phone);
 
     if (secret && secret !== SMS_SECRET_KEY) {
       return res.status(403).json({ success: false, error: 'Invalid secret' });
@@ -89,7 +87,7 @@ app.post('/api/sms-receiver', async (req, res) => {
 
     const lowerMsg = rawMessage.toLowerCase();
     if (lowerMsg.includes('kod') || lowerMsg.includes('code') || lowerMsg.includes('%sms_body%')) {
-      return res.status(200).json({ success: true, message: 'OTP/Test kodi e\'tiborga olinmadi' });
+      return res.status(200).json({ success: true, message: 'OTP e\'tiborga olinmadi' });
     }
 
     let amount = 0;
@@ -100,11 +98,10 @@ app.post('/api/sms-receiver', async (req, res) => {
       amount = parseInt(cleanNum, 10);
     }
 
-    // Adminga SMS haqida xabar yuborish (Avto tasdiqlanmaydi, faqat ma'lumot)
     if (bot && process.env.OWNER_CHAT_ID) {
       bot.sendMessage(
         process.env.OWNER_CHAT_ID,
-        `📩 **Yangi SMS Tushdi (To'lov)**\n\n💰 Summa: **${amount ? amount.toLocaleString('uz-UZ') : 'Noma\'lum'} so'm**\n📱 Tel: \`${phone}\`\n📝 Matn: \`${rawMessage.slice(0, 150)}\`\n\n⚠️ *To'lovni tasdiqlash uchun admin paneldan foydalaning!*`,
+        `📩 **Yangi SMS Tushdi**\n\n💰 Summa: **${amount ? amount.toLocaleString('uz-UZ') : 'Noma\'lum'} so'm**\n📱 Tel: \`${phone}\`\n📝 Matn: \`${rawMessage.slice(0, 150)}\`\n\n⚠️ *To'lovni tasdiqlash uchun bot ichidagi To'lovlar bo'limidan foydalaning!*`,
         { parse_mode: 'Markdown' }
       ).catch(() => {});
     }
@@ -139,7 +136,7 @@ app.post('/api/p2p-check', (req, res) => {
   }
 });
 
-// 📦 BUYURTMA YARATISH (Nomsiz bo'lmasligi uchun ismni saqlaydi)
+// 📦 BUYURTMA YARATISH
 app.post('/api/orders', async (req, res) => {
   const { userId, userName, gameId, type, packageIndex, playerId } = req.body;
   const db = readDb();
@@ -156,13 +153,12 @@ app.post('/api/orders', async (req, res) => {
   const orderId = nanoid(10);
   let order;
 
-  // Ism bo'sh bo'lsa default ism beramiz
-  const finalUserName = (userName && userName.trim()) ? userName.trim() : `Foydalanuvchi (${userId})`;
+  const finalUserName = (userName && userName.trim()) ? userName.trim() : (user.name || `Foydalanuvchi (${userId})`);
 
   updateDb((d) => {
     const u = getUser(d, userId);
     u.balance -= pkg.price;
-    u.name = finalUserName; // foydalanuvchi ismini bazada ham yangilaymiz
+    u.name = finalUserName;
 
     const number = nextOrderNumber(d);
     order = {
@@ -361,3 +357,4 @@ app.delete('/api/admin/reviews/:index', requireAdmin, (req, res) => {
 app.listen(PORT, () => {
   console.log(`✅ FlayPay server ${PORT}-portda ishga tushdi`);
 });
+
