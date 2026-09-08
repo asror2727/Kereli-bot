@@ -1,4 +1,4 @@
-const TelegramBot = require('node-telegram-bot-api');
+Const TelegramBot = require('node-telegram-bot-api');
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
@@ -86,6 +86,7 @@ function initBot() {
       }
     });
 
+    const db = readDb();
     const keyboard = {
       inline_keyboard: [
         [{ text: '🛍 Do\'kon', web_app: { url: webAppUrl } }],
@@ -96,7 +97,6 @@ function initBot() {
     const caption = "FlayPay — o'yin UC, Gold, Almaz va boshqa xaridlar uchun eng tezkor xizmat 🔥\n\nTugmalardan birini tanlang:";
 
     try {
-      const db = readDb();
       const localLogo = toLocalPath(db.splashLogo);
       if (localLogo && fs.existsSync(localLogo)) {
         await bot.sendPhoto(chatId, localLogo, { caption, reply_markup: keyboard });
@@ -315,7 +315,7 @@ function initBot() {
     const action = parts[2];
     if (action === 'add') {
       sessions.set(String(chatId), { step: 'game_name', data: {} });
-      editOrSend(chatId, msgId, '✏️ O\'yin nomini yozing (masalan: PUBG Mobile):', [cancelRow]);
+      editOrSend(chatId, msgId, '✏️ O\'yin nomini yozing:', [cancelRow]);
       return;
     }
     const gameId = parts[3];
@@ -324,10 +324,11 @@ function initBot() {
     if (!game) return sendGamesMenu(chatId, msgId);
 
     if (action === 'view') {
-      const packagesCount = (game.packages || []).length;
-      const text = `🎮 *${game.name}*\nReyting: ${game.rating || '—'}\n\nMavjud paketlar soni: ${packagesCount}`;
+      const ucCount = (game.types.uc || []).length;
+      const primeCount = (game.types.prime || []).length;
+      const text = `🎮 *${game.name}*\nReyting: ${game.rating || '—'}\n\nUC paketlari: ${ucCount}\nPrime paketlari: ${primeCount}`;
       const rows = [
-        [{ text: '➕ Yangi Paket Qo\'shish', callback_data: `adm|pkg|add|${gameId}` }],
+        [{ text: '➕ UC paket', callback_data: `adm|pkg|add|${gameId}|uc` }, { text: '➕ Prime paket', callback_data: `adm|pkg|add|${gameId}|prime` }],
         [{ text: '📋 Paketlar ro\'yxati', callback_data: `adm|pkg|list|${gameId}` }],
         [{ text: '🗑 O\'yinni o\'chirish', callback_data: `adm|game|delete|${gameId}` }],
         [{ text: '⬅️ Orqaga', callback_data: 'adm|menu|games' }]
@@ -343,33 +344,31 @@ function initBot() {
   function handlePkgCallback(parts, chatId, msgId) {
     const action = parts[2];
     if (action === 'add') {
-      const gameId = parts[3];
-      sessions.set(String(chatId), { step: 'pkg_currency', data: { gameId } });
-      editOrSend(chatId, msgId, '💰 O\'yin valyutasi nomini kiriting (masalan: Gold, UC, Diamond, BP):', [cancelRow]);
+      const gameId = parts[3], type = parts[4];
+      sessions.set(String(chatId), { step: 'pkg_icon', data: { gameId, type } });
+      editOrSend(chatId, msgId, `${type === 'uc' ? 'UC' : 'Prime'} paket uchun ikonka yuboring (Emoji yozing yoki Rasm yuboring):`, [cancelRow]);
     }
     if (action === 'list') {
       const gameId = parts[3];
       const db = readDb();
       const game = db.games.find((g) => g.id === gameId);
       if (!game) return sendGamesMenu(chatId, msgId);
-
       const rows = [];
-      const pkgs = game.packages || [];
-      pkgs.forEach((p, idx) => {
-        const iconLabel = (p.icon && p.icon.startsWith('/uploads/')) ? '🖼' : (p.icon || '🪙');
-        const curr = p.currencyName || 'UC';
-        rows.push([{ text: `${iconLabel} ${p.amt} ${curr} — ${Number(p.price).toLocaleString('uz-UZ')} so'm`, callback_data: `adm|pkg|del|${gameId}|${idx}` }]);
+      ['uc', 'prime'].forEach((type) => {
+        (game.types[type] || []).forEach((p, idx) => {
+          const iconLabel = (p.icon && p.icon.startsWith('/uploads/')) ? '🖼' : (p.icon || '🪙');
+          rows.push([{ text: `${iconLabel} ${p.amt} — ${Number(p.price).toLocaleString('uz-UZ')} so'm`, callback_data: `adm|pkg|del|${gameId}|${type}|${idx}` }]);
+        });
       });
-
       rows.push([{ text: '⬅️ Orqaga', callback_data: `adm|game|view|${gameId}` }]);
-      const text = pkgs.length ? `📋 *${game.name}* paketlari:` : `📋 *${game.name}*\n\nHali paket yo'q.`;
+      const text = rows.length > 1 ? `📋 *${game.name}* paketlari` : `📋 *${game.name}*\n\nHali paket yo'q.`;
       editOrSend(chatId, msgId, text, rows);
     }
     if (action === 'del') {
-      const gameId = parts[3], idx = Number(parts[4]);
+      const gameId = parts[3], type = parts[4], idx = Number(parts[5]);
       updateDb((db) => {
         const game = db.games.find((g) => g.id === gameId);
-        if (game && game.packages) game.packages.splice(idx, 1);
+        if (game && game.types[type]) game.types[type].splice(idx, 1);
       });
       handlePkgCallback(['adm', 'pkg', 'list', gameId], chatId, msgId);
     }
@@ -500,25 +499,11 @@ function initBot() {
         case 'game_photo': {
           if (!msg.photo) return bot.sendMessage(chatId, '📸 Iltimos, rasm yuboring.');
           const image = await downloadTelegramFile(msg.photo[msg.photo.length - 1].file_id);
-          const newGame = { 
-            id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), 
-            name: session.data.name, 
-            rating: '5 · 0', 
-            image, 
-            packages: [] 
-          };
+          const newGame = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name: session.data.name, rating: '5 · 0', image, types: { uc: [], prime: [] } };
           updateDb((db) => { db.games.push(newGame); });
           sessions.delete(String(chatId));
           bot.sendMessage(chatId, `✅ "${newGame.name}" qo'shildi!`);
           sendMainMenu(chatId);
-          break;
-        }
-        case 'pkg_currency': {
-          const currencyName = (msg.text || '').trim();
-          if (!currencyName) return bot.sendMessage(chatId, '❌ Iltimos, valyuta nomini yozing (masalan: Gold):');
-          session.data.currencyName = currencyName;
-          session.step = 'pkg_icon';
-          bot.sendMessage(chatId, `${currencyName} uchun ikonka yuboring (Emoji yozing yoki Rasm yuboring):`);
           break;
         }
         case 'pkg_icon': {
@@ -526,31 +511,25 @@ function initBot() {
           if (msg.photo) icon = await downloadTelegramFile(msg.photo[msg.photo.length - 1].file_id);
           else if (msg.text) icon = msg.text.trim();
           else return bot.sendMessage(chatId, '❌ Emoji yozing yoki rasm yuboring.');
-          
           session.data.icon = icon;
           session.step = 'pkg_text';
-          const curr = session.data.currencyName;
-          bot.sendMessage(chatId, `✏️ Nomi va narxini yozing (masalan: 60 - 5000 yoki 60 ${curr}-5000):`);
+          bot.sendMessage(chatId, '✏️ Nomi va narxini yozing (masalan: 60 UC-12000):');
           break;
         }
         case 'pkg_text': {
           const text = (msg.text || '').trim();
           const idx = text.lastIndexOf('-');
-          if (idx === -1) return bot.sendMessage(chatId, '❌ Noto\'g\'ri format. Masalan: 60 - 5000');
+          if (idx === -1) return bot.sendMessage(chatId, '❌ Noto\'g\'ri format. Masalan: 60 UC-12000');
           const amt = text.slice(0, idx).trim();
           const price = parseInt(text.slice(idx + 1).trim().replace(/\s/g, ''), 10);
-          if (!amt || isNaN(price)) return bot.sendMessage(chatId, '❌ Noto\'g\'ri format. Masalan: 60 - 5000');
-          
-          const { gameId, currencyName, icon } = session.data;
+          if (!amt || isNaN(price)) return bot.sendMessage(chatId, '❌ Noto\'g\'ri format. Masalan: 60 UC-12000');
+          const { gameId, type, icon } = session.data;
           updateDb((db) => {
             const game = db.games.find((g) => g.id === gameId);
-            if (game) {
-              if (!game.packages) game.packages = [];
-              game.packages.push({ icon, currencyName, amt, price });
-            }
+            if (game) { if (!game.types[type]) game.types[type] = []; game.types[type].push({ icon, amt, price }); }
           });
           sessions.delete(String(chatId));
-          bot.sendMessage(chatId, `✅ ${amt} ${currencyName} paketi qo'shildi!`);
+          bot.sendMessage(chatId, `✅ Paket qo'shildi!`);
           sendMainMenu(chatId);
           break;
         }
