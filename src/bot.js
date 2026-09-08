@@ -22,6 +22,7 @@ function initBot() {
 
   const bot = new TelegramBot(token, { polling: true });
   bot.on('polling_error', (err) => console.error('Polling xatosi:', err.message));
+  
   bot.getMe().then((me) => { botUsernameCache = me.username; }).catch(() => {});
 
   const channel = process.env.CHANNEL_USERNAME || 'FlayFay1';
@@ -223,26 +224,12 @@ function initBot() {
 
   function handleOrderAction(orderId, action, chatId, msgId) {
     let result = null;
-    let generatedPromo = null;
-
     updateDb((db) => {
       const order = db.orders.find((o) => o.id === orderId);
       if (!order || order.status !== 'pending') return;
       if (action === 'confirm') {
         order.status = 'done';
         order.completedAt = new Date().toISOString();
-        
-        // Unikal Promokod avto-generatsiyasi
-        generatedPromo = 'PROMO-' + Math.random().toString(36).substring(2, 7).toUpperCase();
-        order.promoCode = generatedPromo;
-        
-        if (!db.promos) db.promos = [];
-        db.promos.push({
-          code: generatedPromo,
-          discountPercent: 5,
-          userId: order.userId,
-          used: false
-        });
       } else {
         order.status = 'rejected';
         getUser(db, order.userId).balance += order.price;
@@ -261,9 +248,8 @@ function initBot() {
     if (action === 'confirm') {
       bot.editMessageText(`✅ Tasdiqlandi — #${result.number}`, { chat_id: chatId, message_id: msgId }).catch(() => {});
 
-      const customerText = `✅ Buyurtmangiz muvaffaqiyatli yakunlandi!\n\n🧾 Buyurtma: #${result.number}\n🎮 O'yin: ${result.gameName}\n📦 Miqdor: ${result.packageLabel}\n🆔 O'yinchi ID: ${result.playerId}\n💰 Narx: ${Number(result.price).toLocaleString('uz-UZ')} so'm\n🕐 Yakunlandi: ${when}\n\n🎁 **Siz uchun maxsus promokod:** \`${generatedPromo}\` (Keyingi xaridingizga chegirma!)\n\n❤️ Ishonchingiz uchun rahmat!`;
-      
-      bot.sendMessage(result.userId, customerText, { parse_mode: 'Markdown' }).then(() => {
+      const customerText = `✅ Buyurtmangiz muvaffaqiyatli yakunlandi!\n\n🧾 Buyurtma: #${result.number}\n🎮 O'yin: ${result.gameName}\n📦 Miqdor: ${result.packageLabel}\n🆔 O'yinchi ID: ${result.playerId}\n💰 Narx: ${Number(result.price).toLocaleString('uz-UZ')} so'm\n🕐 Yakunlandi: ${when}\n\n❤️ Ishonchingiz uchun rahmat!`;
+      bot.sendMessage(result.userId, customerText).then(() => {
         bot.sendMessage(result.userId, 'Xizmatimizni baholab bera olasizmi? ⭐', {
           reply_markup: { inline_keyboard: [[1, 2, 3, 4, 5].map((n) => ({ text: String(n), callback_data: `rate|${result.id}|${n}` }))] }
         });
@@ -411,7 +397,8 @@ function initBot() {
     }
     bot.editMessageText(`💰 *To'lovlar* — ${pending.length} ta kutilmoqda:`, { chat_id: chatId, message_id: msgId, parse_mode: 'Markdown' }).catch(() => {});
     pending.forEach((dep) => {
-      bot.sendMessage(chatId, `💰 ${Number(dep.amount).toLocaleString('uz-UZ')} so'm — ${dep.method.toUpperCase()}\nFoydalanuvchi ID: ${dep.userId}`, {
+      bot.sendMessage(chatId, `💰 ${Number(dep.amount).toLocaleString('uz-UZ')} so'm — ${(dep.method || 'UZCARD').toUpperCase()}\nFoydalanuvchi ID: \`${dep.userId}\``, {
+        parse_mode: 'Markdown',
         reply_markup: { inline_keyboard: [[{ text: '✅ Tasdiqlash', callback_data: `dep_confirm_${dep.id}` }, { text: '❌ Bekor qilish', callback_data: `dep_reject_${dep.id}` }]] }
       });
     });
@@ -435,7 +422,7 @@ function initBot() {
     const u = db.users[String(order.userId)];
     const displayName = order.userName || (u && u.name) || `User ${order.userId}`;
 
-    const text = `📦 **Yangi Buyurtma** #${order.number}\n\n👤 **Xaridor:** ${displayName}\n🆔 **User ID:** \`${order.userId}\`\n🎮 **O'yin:** ${order.gameName}\n📦 **Miqdor:** ${order.packageLabel}\n🆔 **O'yinchi ID:** \`${order.playerId}\`\n💰 **Narx:** ${Number(order.price).toLocaleString('uz-UZ')} so'm`;
+    const text = `📦 *Yangi Buyurtma* #${order.number}\n\n👤 *Xaridor:* ${displayName}\n🆔 *User ID:* \`${order.userId}\`\n🎮 *O'yin:* ${order.gameName}\n📦 *Miqdor:* ${order.packageLabel}\n🆔 *O'yinchi ID:* \`${order.playerId}\`\n💰 *Narx:* ${Number(order.price).toLocaleString('uz-UZ')} so'm`;
     
     getAllAdminIds(db).forEach((adminId) => {
       bot.sendMessage(adminId, text, {
@@ -607,7 +594,7 @@ function initBot() {
 
   function sendDepositNotification(deposit) {
     const db = readDb();
-    const text = `💰 **Yangi to'lov so'rovi (Ruchnoy)**\n\n🆔 Foydalanuvchi ID: \`${deposit.userId}\`\n💵 Summa: **${deposit.amount.toLocaleString('uz-UZ')} so'm**\n💳 Turi: ${deposit.method.toUpperCase()}`;
+    const text = `💰 *Yangi to'lov so'rovi (Ruchnoy)*\n\n🆔 Foydalanuvchi ID: \`${deposit.userId}\`\n💵 Summa: *${Number(deposit.amount).toLocaleString('uz-UZ')} so'm*\n💳 Turi: ${(deposit.method || 'UZCARD').toUpperCase()}`;
     getAllAdminIds(db).forEach((adminId) => {
       bot.sendMessage(adminId, text, {
         parse_mode: 'Markdown',
